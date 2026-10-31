@@ -1,0 +1,5 @@
+issue_id,candidate_id,compare_to,question,source_definitions,observable_distinction,task_examples,evidence_eligibility,reviewer,decision,rationale,status
+ADJ-001,PA-020,PA-019,Distinctness and task demands,,,,,,,,open
+ADJ-002,PH-023,"SM-014, DE-022, MS-010",Domain overlap and instructional locus,,,,,,,,open
+ADJ-003,OL-014,,Distinctness from neighboring oral-language skills,,,,,,,,open
+ADJ-004,RC-005,,Eligible evidence and task conditions,,,,,,,,open

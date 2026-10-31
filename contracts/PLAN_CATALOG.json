@@ -1,0 +1,22 @@
+{
+  "status": "planning_only_not_live_provider_prices",
+  "free": {
+    "monthly_usd_cents": 0
+  },
+  "family_plus": {
+    "monthly_usd_cents": 999,
+    "currency": "USD",
+    "billing_period": "month"
+  },
+  "solo_educator": {
+    "monthly_usd_cents": 1999,
+    "currency": "USD",
+    "billing_period": "month",
+    "student_roster_authority_included": false,
+    "authorized_learner_limit": "pending_decision"
+  },
+  "school": {
+    "price": "custom_future",
+    "enabled": false
+  }
+}

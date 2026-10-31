@@ -1,0 +1,92 @@
+{
+  "status": "candidate_counts_only",
+  "canonical_skill_definitions_present": false,
+  "expected_candidate_count": 91,
+  "target_aspiration": "150+ pending decision",
+  "domains": [
+    {
+      "code": "PA",
+      "name": "Phonemic awareness",
+      "strand": "word_recognition",
+      "candidate_count": 14,
+      "routine_id": "IR-PA"
+    },
+    {
+      "code": "PH",
+      "name": "Phonics",
+      "strand": "word_recognition",
+      "candidate_count": 16,
+      "routine_id": "IR-PH"
+    },
+    {
+      "code": "DE",
+      "name": "Decoding",
+      "strand": "word_recognition",
+      "candidate_count": 5,
+      "routine_id": "IR-DE"
+    },
+    {
+      "code": "OR",
+      "name": "Orthographic automaticity",
+      "strand": "word_recognition",
+      "candidate_count": 4,
+      "routine_id": "IR-OR"
+    },
+    {
+      "code": "MS",
+      "name": "Multisyllabic word reading",
+      "strand": "word_recognition",
+      "candidate_count": 5,
+      "routine_id": "IR-MS"
+    },
+    {
+      "code": "FL",
+      "name": "Fluency",
+      "strand": "word_recognition",
+      "candidate_count": 5,
+      "routine_id": "IR-FL"
+    },
+    {
+      "code": "OL",
+      "name": "Oral language",
+      "strand": "language_comprehension",
+      "candidate_count": 8,
+      "routine_id": "IR-OL"
+    },
+    {
+      "code": "VS",
+      "name": "Vocabulary and semantics",
+      "strand": "language_comprehension",
+      "candidate_count": 7,
+      "routine_id": "IR-VS"
+    },
+    {
+      "code": "SM",
+      "name": "Syntax and morphology",
+      "strand": "language_comprehension",
+      "candidate_count": 8,
+      "routine_id": "IR-SM"
+    },
+    {
+      "code": "BK",
+      "name": "Background knowledge",
+      "strand": "language_comprehension",
+      "candidate_count": 6,
+      "routine_id": "IR-BK"
+    },
+    {
+      "code": "ND",
+      "name": "Narrative and discourse",
+      "strand": "language_comprehension",
+      "candidate_count": 7,
+      "routine_id": "IR-ND"
+    },
+    {
+      "code": "RC",
+      "name": "Reading comprehension",
+      "strand": "language_comprehension",
+      "candidate_count": 6,
+      "routine_id": "IR-RC"
+    }
+  ]
+}

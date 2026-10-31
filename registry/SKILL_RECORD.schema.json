@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://livingliteracy.example/specs/skill-record.schema.json",
+  "title": "Candidate Skill Record \u2014 NOT automatically approved",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "skill_id",
+    "version",
+    "domain_code",
+    "name",
+    "observable_behavior",
+    "instructional_routine_id",
+    "status",
+    "prerequisite_skill_ids",
+    "eligible_evidence",
+    "review"
+  ],
+  "properties": {
+    "skill_id": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}-[0-9]{3}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "domain_code": {
+      "enum": [
+        "PA",
+        "PH",
+        "DE",
+        "OR",
+        "MS",
+        "FL",
+        "OL",
+        "VS",
+        "SM",
+        "BK",
+        "ND",
+        "RC"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3
+    },
+    "observable_behavior": {
+      "type": "string",
+      "minLength": 20
+    },
+    "prerequisite_skill_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "related_skill_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "instructional_routine_id": {
+      "type": "string"
+    },
+    "eligible_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "task_condition",
+          "response_type",
+          "assistance_rule"
+        ],
+        "properties": {
+          "task_condition": {
+            "type": "string"
+          },
+          "response_type": {
+            "type": "string"
+          },
+          "assistance_rule": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "needs_expert_review",
+        "approved_for_prototype",
+        "approved_for_limited_pilot",
+        "approved_for_production",
+        "blocked",
+        "retired"
+      ]
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "reviewer_ref",
+        "decision_ref",
+        "decision_date"
+      ],
+      "properties": {
+        "reviewer_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "adjudication_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

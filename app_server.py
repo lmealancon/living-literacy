@@ -1,0 +1,249 @@
+"""Local synthetic-family demonstration. NOT safe to expose on a network.
+
+The identity, guardian authority, consent and review fixtures are simulated. This
+is not a production service and must never be used for real student data.
+"""
+import argparse
+import hashlib
+import hmac
+import json
+import secrets
+import sqlite3
+from dataclasses import asdict
+from getpass import getpass
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit, unquote
+
+from prototype.instructional_content import CONTENT_PATH
+from prototype.lesson_engine import PolicyError, ConflictError
+from prototype.persistent_store import SyntheticSQLiteStore
+from prototype.synthetic_auth import SyntheticParentAuth, resolve
+
+WEB = Path(__file__).parent / 'web'
+MAX_REQUEST = 4096
+
+
+def bootstrap(filename, identity, password):
+    """Create fictional account and simulated review fixtures in a fresh database."""
+    if not identity.startswith('synthetic-'):
+        raise ValueError('Identity must begin with synthetic-')
+    store = SyntheticSQLiteStore(filename)
+    token = store.provision_synthetic_family('synthetic-family-1', identity, 'synthetic-student-1')
+    SyntheticParentAuth(store).enroll(token, password)
+    lesson = json.loads(CONTENT_PATH.read_text(encoding='utf-8'))
+    registry = store.content_registry()
+    registry.create_draft(lesson, 'synthetic-author')
+    registry.transition(lesson['lesson_id'], lesson['version'], 'submit', 'synthetic-author', 'fixture')
+    registry.transition(lesson['lesson_id'], lesson['version'], 'approve_prototype', 'synthetic-reviewer', 'fixture')
+
+
+class App:
+    def __init__(self, filename):
+        self.store = SyntheticSQLiteStore(filename)
+        self.auth = SyntheticParentAuth(self.store)
+        self.csrf_secret = secrets.token_bytes(32)
+
+    def csrf(self, token):
+        return hmac.new(self.csrf_secret, token.encode(), hashlib.sha256).hexdigest()
+
+    def identity(self, token):
+        with self.store._connect() as db:
+            return resolve(db, token)
+
+    def profiles(self, token):
+        with self.store._connect() as db:
+            identity = resolve(db, token)
+            ids = [row[0] for row in db.execute('SELECT student_id FROM grants WHERE identity_id=?', (identity,))]
+            profiles = []
+            for student_id in ids:
+                try:
+                    actor = self.store._actor(db, token, student_id, 'profile')
+                    profiles.append({'id': student_id, 'workspace_id': actor.workspace_id, 'synthetic': True})
+                except PolicyError:
+                    pass
+            return profiles
+
+    def history(self, token, student_id):
+        with self.store._connect() as db:
+            self.store._actor(db, token, student_id, 'lesson')
+            return [json.loads(row[0]) for row in db.execute('SELECT payload FROM sessions WHERE student_id=? ORDER BY rowid DESC', (student_id,))]
+
+    def lessons(self):
+        with self.store._connect() as db:
+            try:
+                versions = list(db.execute("SELECT lesson_id,version FROM content_versions WHERE status='approved_for_prototype'"))
+            except sqlite3.OperationalError:
+                return []
+        lessons = []
+        for lesson_id, version in versions:
+            try:
+                lessons.append(self.store.content_for_demo(lesson_id, version))
+            except PolicyError:
+                pass
+        return lessons
+
+
+def make_handler(app):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def send_body(self, status, body, content_type='application/json; charset=utf-8', cookie=None):
+            if not isinstance(body, bytes):
+                body = json.dumps(body).encode('utf-8')
+            self.send_response(status)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('Content-Security-Policy', "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+            if cookie:
+                self.send_header('Set-Cookie', cookie)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def token(self):
+            cookie = SimpleCookie()
+            try:
+                cookie.load(self.headers.get('Cookie', ''))
+                return cookie['ll_session'].value if 'll_session' in cookie else ''
+            except Exception:
+                return ''
+
+        def valid_host(self):
+            return self.headers.get('Host') == '127.0.0.1:' + str(self.server.server_port)
+
+        def valid_origin(self):
+            return self.headers.get('Origin') == 'http://127.0.0.1:' + str(self.server.server_port)
+
+        def do_GET(self):
+            if not self.valid_host():
+                return self.send_body(403, {'error': 'Forbidden'})
+            path = urlsplit(self.path).path
+            static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8')}
+            if path in static:
+                name, mime = static[path]
+                return self.send_body(200, (WEB / name).read_bytes(), mime)
+            try:
+                token = self.token()
+                identity = app.identity(token)
+                if path == '/api/me':
+                    return self.send_body(200, {'identity': identity, 'csrf': app.csrf(token)})
+                if path == '/api/profiles':
+                    return self.send_body(200, {'profiles': app.profiles(token)})
+                if path == '/api/lessons':
+                    return self.send_body(200, {'lessons': app.lessons()})
+                parts = path.strip('/').split('/')
+                if len(parts) == 4 and parts[:2] == ['api', 'lessons']:
+                    lesson = app.store.content_for_demo(unquote(parts[2]), unquote(parts[3]))
+                    return self.send_body(200, {'lesson': lesson})
+                if len(parts) == 3 and parts[:2] == ['api', 'sessions']:
+                    return self.send_body(200, {'session': asdict(app.store.get_session(token, unquote(parts[2])))})
+                if len(parts) == 3 and parts[:2] == ['api', 'history']:
+                    return self.send_body(200, {'sessions': app.history(token, unquote(parts[2]))})
+                return self.send_body(404, {'error': 'Not found'})
+            except PolicyError:
+                return self.send_body(403, {'error': 'Access denied'})
+            except sqlite3.OperationalError:
+                return self.send_body(503, {'error': 'Service unavailable'})
+
+        def do_POST(self):
+            if not self.valid_host() or not self.valid_origin():
+                return self.send_body(403, {'error': 'Forbidden'})
+            if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
+                return self.send_body(415, {'error': 'JSON required'})
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if length <= 0 or length > MAX_REQUEST:
+                    return self.send_body(413, {'error': 'Invalid request size'})
+                data = json.loads(self.rfile.read(length).decode('utf-8'))
+                if not isinstance(data, dict):
+                    raise ValueError('Invalid body')
+                path = urlsplit(self.path).path
+                if path == '/api/login':
+                    identity, password = data.get('identity'), data.get('passphrase')
+                    if not isinstance(identity, str) or len(identity) > 100:
+                        raise ValueError('Invalid identity')
+                    token = app.auth.login(identity, password)
+                    return self.send_body(200, {'identity': identity, 'csrf': app.csrf(token)}, cookie='ll_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600')
+                token = self.token()
+                app.identity(token)
+                if not hmac.compare_digest(self.headers.get('X-CSRF-Token', ''), app.csrf(token)):
+                    return self.send_body(403, {'error': 'Forbidden'})
+                if path == '/api/logout':
+                    app.auth.logout(token)
+                    return self.send_body(200, {'ok': True}, cookie='ll_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+                if path == '/api/profiles':
+                    profile = app.store.create_synthetic_profile(token, data['anchor_id'], data['student_id'])
+                    return self.send_body(201, {'profile': profile})
+                if path == '/api/sessions':
+                    key = data.get('idempotency_key')
+                    if not isinstance(key, str) or not 16 <= len(key) <= 100 or not key.isascii():
+                        raise ValueError('Invalid idempotency key')
+                    session = app.store.start(token, data['student_id'], data['lesson_id'], data['version'], key)
+                    return self.send_body(201, {'session': asdict(session)})
+                parts = path.strip('/').split('/')
+                if len(parts) == 4 and parts[:2] == ['api', 'sessions'] and parts[3] == 'action':
+                    sid = unquote(parts[2]); action = data['action']; revision = data['revision']
+                    if not isinstance(revision, int) or isinstance(revision, bool):
+                        raise ValueError('Invalid revision')
+                    if action in ('activate', 'resume', 'pause', 'complete'):
+                        target = {'activate': 'active', 'resume': 'active', 'pause': 'paused', 'complete': 'completed'}[action]
+                        app.store.transition(token, sid, target, revision)
+                    elif action == 'next':
+                        app.store.advance_stage(token, sid, revision)
+                    elif action == 'respond':
+                        response = data.get('response', '')
+                        if not isinstance(response, str) or len(response) > 500 or not isinstance(data.get('assisted'), bool):
+                            raise ValueError('Invalid response')
+                        current = app.store.get_session(token, sid)
+                        app.store.record_response(token, sid, revision, response, {'audio_or_modeling': data['assisted']}, independent_task=(current.stage_index == 4))
+                    else:
+                        raise ValueError('Invalid action')
+                    return self.send_body(200, {'session': asdict(app.store.get_session(token, sid))})
+                return self.send_body(404, {'error': 'Not found'})
+            except ConflictError:
+                return self.send_body(409, {'error': 'Conflicting change'})
+            except PolicyError:
+                return self.send_body(403, {'error': 'Action unavailable'})
+            except sqlite3.OperationalError:
+                return self.send_body(503, {'error': 'Service unavailable'})
+            except (ValueError, TypeError, KeyError, UnicodeError, json.JSONDecodeError, sqlite3.IntegrityError):
+                return self.send_body(400, {'error': 'Invalid request'})
+
+    return Handler
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Local-only, synthetic-data prototype')
+    parser.add_argument('--db', default='living-literacy-demo.sqlite3')
+    parser.add_argument('--init', action='store_true', help='Initialize an empty synthetic demo database')
+    parser.add_argument('--identity', default='synthetic-parent-1')
+    parser.add_argument('--port', type=int, default=8765)
+    parser.add_argument('--container-demo', action='store_true',
+                        help='Allow container-network access; only use with a loopback-published local demo')
+    args = parser.parse_args()
+    if args.init:
+        if Path(args.db).exists():
+            raise SystemExit('Database already exists; refusing to overwrite')
+        password = getpass('Fictional demo passphrase (12+ characters): ')
+        bootstrap(args.db, args.identity, password)
+        print('Synthetic database initialized. Run again without --init.')
+        return
+    if not Path(args.db).is_file():
+        raise SystemExit('Initialize a synthetic database first with --init')
+    # Docker port forwarding needs a listener on the container network. Keep
+    # localhost as the default and make the wider listener an explicit opt-in.
+    # The Host/Origin checks still require the browser's 127.0.0.1 origin.
+    bind_host = '0.0.0.0' if args.container_demo else '127.0.0.1'
+    if args.container_demo:
+        print('WARNING: container-network listener; restrict port publishing to localhost. Synthetic data only.', flush=True)
+    server = ThreadingHTTPServer((bind_host, args.port), make_handler(App(args.db)))
+    print('Synthetic-only local app at http://127.0.0.1:%s' % server.server_port, flush=True)
+    server.serve_forever()
+
+
+if __name__ == '__main__':
+    main()
