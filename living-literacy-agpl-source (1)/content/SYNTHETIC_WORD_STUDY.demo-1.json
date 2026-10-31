@@ -1,0 +1,64 @@
+{
+  "lesson_id": "synthetic-lesson-word-study",
+  "version": "demo-1",
+  "publication_status": "prototype_only",
+  "skill_ids": [],
+  "title": "Build and Read: map",
+  "audience": "Synthetic adult demonstration only; not a validated lesson",
+  "stages": [
+    {
+      "id": "activate",
+      "title": "Activate",
+      "instruction": "Say the word “map.” What sounds do you hear?",
+      "display_text": "map",
+      "coach_note": "Invite a fictional learner to listen and say the sounds /m/ /ă/ /p/. This is modeled content, not a real assessment.",
+      "response_prompt": "Type the sounds you heard (fictional practice).",
+      "independent_task": false
+    },
+    {
+      "id": "model",
+      "title": "Model",
+      "instruction": "Watch the example: m says /m/, a says /ă/, and p says /p/. Blend: /m/ /ă/ /p/ → map.",
+      "display_text": "m  +  a  +  p  →  map",
+      "coach_note": "An adult models sound-to-letter correspondences and blending. The written pronunciation is illustrative, not a substitute for professional audio.",
+      "response_prompt": "Describe what the model did.",
+      "independent_task": false
+    },
+    {
+      "id": "guide",
+      "title": "Guide",
+      "instruction": "Blend with help: /m/ ... /ă/ ... /p/. Now say “map.”",
+      "display_text": "m | a | p",
+      "coach_note": "Provide prompts as needed and mark help as assistance.",
+      "response_prompt": "Enter the guided practice response.",
+      "independent_task": false
+    },
+    {
+      "id": "practice",
+      "title": "Practice",
+      "instruction": "Try building the word from the letters m, a and p. Then read it.",
+      "display_text": "p   m   a",
+      "coach_note": "Practice can involve hints. Do not label practice as independent mastery evidence.",
+      "response_prompt": "Type the word you built.",
+      "independent_task": false
+    },
+    {
+      "id": "apply_independently",
+      "title": "Apply Independently",
+      "instruction": "Without the model or audio, read this word: map.",
+      "display_text": "map",
+      "coach_note": "The prototype records a self-reported response; it cannot verify spoken decoding or independently certify mastery.",
+      "response_prompt": "Type what the fictional learner read.",
+      "independent_task": true
+    },
+    {
+      "id": "review",
+      "title": "Review",
+      "instruction": "Review how m, a and p combine to make map. Which step helped you most?",
+      "display_text": "m → /m/     a → /ă/     p → /p/",
+      "coach_note": "Reflect and plan another practice opportunity. Do not infer retention from this activity.",
+      "response_prompt": "Write one thing to review next time.",
+      "independent_task": false
+    }
+  ]
+}

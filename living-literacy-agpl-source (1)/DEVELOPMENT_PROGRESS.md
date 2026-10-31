@@ -1,0 +1,85 @@
+# Living Literacy development progress
+
+## Scope and release status
+
+Synthetic student data only. This is not approved for production use with children, real guardian consent, live payment, schools, or validated assessment. `specs/RELEASE_GATES.md` and `docs/DECISION_REGISTER.md` remain authoritative. The v1.0 Python prototype and original tests are retained. The supplied archive does not include the complete skill definitions, independently approved instructional inventory, assessment forms, source material, or human review decisions. Those are not invented here.
+
+## Phase 1: inspection and baseline — complete
+
+Read README, AGENTS, product and privacy specifications, decision register, lesson and content code, and test suite. The baseline `python3 -m unittest discover -s tests -q` ran 73 tests successfully. `python3 scripts/validate_registry.py` passed the 12-domain manifest check and reported 91 candidate count and zero imported canonical skills (expected blocker).
+
+Existing components: six-stage in-memory lesson engine, SQLite synthetic persistence, simulated content review and version pinning, withdrawal enforcement, localhost demo, and synthetic-only credential and guardian checks. The local demo shares a fixture and is not a live multi-user app. Earlier README sections have stale status text.
+
+## Requirements and decisions missing before dependent release
+
+- D-004/D-005/D-016: approved source definitions, identity provenance and adjudication for skills; no skill definitions or mastery thresholds may be invented.
+- D-008/D-012: independently reviewed lessons, reviewer identity and publishing authority; synthetic review identifiers are not real approval.
+- D-006/D-007: validated evidence rules, thresholds and assessment instruments; no diagnostic, grade, Lexile, disability, or mastery claims.
+- D-010/D-011: vendors, contracts, privacy notices, retention and deletion; real child processing remains blocked. Guardian fixtures are not legal authority or consent.
+- D-009/D-013: educator permissions, procurement and contracts; paid access is not student-record authorization.
+- D-015: reviewed API and migrations; PostgreSQL, identity provider and storage choices unresolved.
+- Story Vibes requires reviewed source/script fidelity, licensed voices and approved audio assets. Billing requires provider configuration, verified webhook testing and legal review before charges.
+- Accessibility, incident response, audit, backups/restores and security review must be verified before launch.
+
+## Phase tracking
+
+1. Inspection and baseline — complete.
+2. Full-stack foundation — in progress; existing stdlib Python/SQLite implementation is being extended. The npm registry was reachable with additional network permission and a writable cache; Next.js is not installed and no PostgreSQL server is available. No production migration has been verified.
+3. Parent authentication, guardian permissions and child profiles — synthetic backend foundations exist; real identity and consent are blocked.
+4. Six-stage engine and content registry — existing prototype; retain version pinning and withdrawal safeguards.
+5. Parent and student dashboards — in progress, synthetic only.
+6. Skill registry and recommendations — in progress; zero approved canonical skills; no unsupported recommendations.
+7. Assessment framework — in progress; no validated instrument or scoring thresholds.
+8. Story Vibes — gated until reviewed scripts and approved licensed audio are available.
+9. Curriculum and resources — synthetic content governance only; production resources pending review.
+10. Billing and educator features — not implemented; no live billing or real student records.
+11. Admin, privacy workflows, observability and protections — incomplete; human review and production authorization required.
+12. Staging, deployment and release review — not done. No live URL claimed.
+
+## Implemented in this development pass
+
+- `prototype/content_registry.py`, `tests/test_review_integrity.py`: synthetic submitter cannot approve their own submission; approval rechecks the content digest. Simulated identities are not proof of independent review.
+- `prototype/skill_registry.py`, `tests/test_skill_registry.py`: immutable synthetic draft snapshots, missing-dependency and cycle checks, and simulated separate review; no canonical definitions or automatic recommendations added.
+- `prototype/synthetic_assessment.py`, `tests/test_synthetic_assessment.py`: synthetic forms and response/assistance capture with explicit simulated consent, authorization, content version and withdrawal checks; no scoring or diagnostic claims.
+- `prototype/story_vibes_policy.py`, `tests/test_story_vibes_policy.py`: isolated synthetic source/script/asset and narration eligibility checks. No audio playback, real approval, or persisted exposure integration.
+- `prototype/web/`: synthetic login, profile, history and lesson user interface. API integration and browser verification pending.
+- `docs/OPERATIONS.md`: local operations guidance and synthetic SQLite backup/restore drill; production recovery remains unverified.
+
+Intermediate verification: `python3 -m unittest discover -s tests -q` passed 96 tests. `python3 scripts/validate_registry.py` passed manifest validation and reported the expected empty canonical registry. `node --check prototype/web/app.js` passed. This evidence does not establish security, accessibility, or release readiness.
+
+## Local application integration update
+
+`prototype/app_server.py` connects `prototype/web/` to the existing synthetic store, credential fixture, profile authorization, lesson engine and approved-prototype content registry. `tests/test_app_server.py` exercises the request handlers in process, including cross-family denial, CSRF, session history, content withdrawal, required assistance and idempotency. The UI refreshes approved lesson content before rendering a stage; already displayed content cannot be recalled from an open browser until another request or render. Keyboard focus target was added to the stage heading. Browser and screen-reader tests have not been performed.
+
+To initialize and run locally (fictional data only):
+
+```sh
+python3 -m prototype.app_server --init
+python3 -m prototype.app_server
+```
+
+Enter a fictional passphrase at initialization; the default identity is `synthetic-parent-1`. Open `http://127.0.0.1:8765` on the machine running the server. This is not a public deployment: the server binds localhost, lacks production security, and simulates guardian authority and consent. Do not enter real personal or student data. Existing demo databases are never overwritten by initialization.
+
+Latest verification: `python3 -m unittest discover -s tests -q` passed 99 tests; `node --check prototype/web/app.js` passed; `python3 scripts/validate_registry.py` passed with the expected zero-skill blocker. These include in-process HTTP handler tests, not real network or browser testing. The features remain incomplete: no real signup, managed authentication, public deployment, billing, production content review, approved assessments, audio playback, classroom features, PostgreSQL migration, complete public website or release authorization. Next bounded task: browser integration testing and review of the local authorization and withdrawal boundary, followed by explicit architecture and production-service integration decisions.
+
+## Community Edition direction — 2026-10-31
+
+Audited the existing v1.0 project and documented the target separation of self-hosted educational core from optional hosted services in `docs/COMMUNITY_ARCHITECTURE.md` and phased work in `docs/COMMUNITY_ROADMAP.md`. A local Git repository was initialized, with ignore rules and a CI workflow. No remote was configured and nothing was published. A final code license, branding approval, and rights/provenance review remain unresolved; `docs/LICENSING_AND_CONTENT.md` records the decisions, and `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md` are drafts pending reporting contacts and owner approval.
+
+Implemented incremental foundations:
+
+- `prototype/migrations.py`, `tests/test_migrations.py`: explicit transactional SQLite migration for the recognized synthetic schema only, with a checksummed ledger and two indexes. Back up first; it never creates guardian grants or consent, and does not migrate PostgreSQL. See `docs/OPERATIONS.md`.
+- `prototype/extension_contracts.py`, `tests/test_extension_contracts.py`, `docs/EXTENSION_CONTRACTS.md`: experimental data-only curriculum, narration and assessment interfaces with validation. They do not load plugins, expose stable HTTP APIs, bypass authorization or publish content.
+- `Dockerfile`, `compose.yaml`, `.dockerignore`, `.env.example`, `CONTAINER_DEMO.md`, and `tests/test_container_demo.py`: local synthetic demo scaffolding with localhost host-port publication and simulated credentials. A container does not make the prototype appropriate for real learners or public use. `app_server.py` retains normal loopback default and has a deliberate opt-in container listener.
+- `.github/workflows/ci.yml`: test workflow configuration; no remote CI run has occurred.
+
+Verification: the complete suite passed 114 tests (`python3 -m unittest discover -s tests -q`); `python3 scripts/validate_registry.py` passed and confirmed zero canonical skill imports; `node --check prototype/web/app.js` passed; `docker compose --env-file .env.example config --quiet` passed. Docker image build, startup, persistent volume and connectivity were not verified because the Docker daemon socket returned permission denied. Existing tests run in-process and do not establish browser accessibility, actual container behavior, production security or scientific validity.
+
+Community Edition is not finished: real role/relationship/consent enforcement, institution isolation, production-ready identity, reviewed content and rights, integrated registry/assessment/narration interfaces, documented stable APIs, cross-platform container verification, reliable migrations for other schemas, accessible browser testing, and release review remain. The 91 candidate definitions and validated instruments are still absent. Self-hosted functionality must not depend on hosted billing. No final license has been chosen and the user must approve license, branding and included content before publication.
+
+
+## License and proposed release approval
+
+The owner chose AGPL-3.0 for the software; the repository applies version 3 only (AGPL-3.0-only), with the full text in `LICENSE`. The owner also approved the current Living Literacy name and included sample content and documents for the proposed public repository. The software license does not automatically confer a separate educational-content or trademark license. Contributor terms, private reporting routes and detailed third-party/content provenance remain to be resolved. Earlier entries describing the license decision as pending are historical.
+
+The approval to publish source does not authorize live operation with real child data, scientific claims, or production release.

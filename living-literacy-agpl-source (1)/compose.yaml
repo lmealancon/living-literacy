@@ -1,0 +1,24 @@
+# Local synthetic demo only. Do not publish this service on a public interface.
+services:
+  living-literacy:
+    build: .
+    environment:
+      PYTHONUNBUFFERED: "${PYTHONUNBUFFERED:-1}"
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - literacy-demo-data:/data
+    networks:
+      - demo-local
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+networks:
+  demo-local:
+    internal: true
+volumes:
+  literacy-demo-data:

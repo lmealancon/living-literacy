@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Living Literacy Lesson Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lesson_id",
+    "version",
+    "status",
+    "title",
+    "target_skill_ids",
+    "stages",
+    "evidence_policy",
+    "review"
+  ],
+  "properties": {
+    "lesson_id": {
+      "type": "string",
+      "pattern": "^LL-LSN-[0-9]{4}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "needs_expert_review",
+        "approved_for_prototype",
+        "approved_for_limited_pilot",
+        "approved_for_production",
+        "retired"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "target_skill_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2}-[0-9]{3}$"
+      },
+      "uniqueItems": true
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "const": "activate"
+        },
+        {
+          "const": "model"
+        },
+        {
+          "const": "guide"
+        },
+        {
+          "const": "practice"
+        },
+        {
+          "const": "apply_independently"
+        },
+        {
+          "const": "review"
+        }
+      ],
+      "items": false
+    },
+    "evidence_policy": {
+      "type": "object",
+      "required": [
+        "completion_is_mastery",
+        "auto_mastery_enabled"
+      ],
+      "properties": {
+        "completion_is_mastery": {
+          "const": false
+        },
+        "auto_mastery_enabled": {
+          "const": false
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "reviewer_ref",
+        "decision_ref"
+      ],
+      "properties": {
+        "reviewer_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
