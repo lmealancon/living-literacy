@@ -79,6 +79,24 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(self.call('GET', '/api/history/synthetic-student-b')[0], 403)
         self.assertEqual(self.call('POST', '/api/profiles', {'anchor_id': 'synthetic-student-b', 'student_id': 'synthetic-new'})[0], 403)
 
+    def test_interests_and_activity_require_authorized_profile_and_csrf(self):
+        self.login()
+        path = '/api/profiles/synthetic-student-1/interests'
+        self.assertEqual(self.call('GET', path)[1]['interests'], [])
+        self.assertEqual(self.call('POST', path, {'interests': ['music', 'science']}, csrf=False)[0], 403)
+        self.assertEqual(self.call('POST', path, {'interests': ['music', 'science']})[0], 200)
+        self.assertEqual(self.call('GET', path)[1]['interests'], ['music', 'science'])
+        self.assertEqual(self.call('POST', path, {'interests': ['private text']})[0], 403)
+        self.assertEqual(self.call('GET', '/api/profiles/synthetic-student-b/interests')[0], 403)
+        self.assertEqual(self.call('POST', '/api/profiles/synthetic-student-b/interests', {'interests': ['music']})[0], 403)
+        self.assertEqual(self.call('GET', '/api/profiles/synthetic-student-1/activity')[1]['sessions_total'], 0)
+        self.assertEqual(self.call('GET', '/api/profiles/synthetic-student-b/activity')[0], 403)
+        token = SyntheticParentAuth(self.app.store).login('synthetic-parent-a', 'fictional-password-a')
+        self.app.store.withdraw_synthetic_consent(token, 'synthetic-student-1', 'profile')
+        # Login rotates the original token; use the new identity for the revocation check.
+        self.cookie = 'll_session=' + token
+        self.assertEqual(self.call('GET', path)[0], 403)
+
     def test_withdrawn_lesson_blocks_existing_session_write(self):
         self.login()
         data = self.call('POST', '/api/sessions', {'student_id': 'synthetic-student-1', 'lesson_id': 'synthetic-lesson-word-study', 'version': 'demo-1', 'idempotency_key': 'synthetic-test-key-123'})[1]

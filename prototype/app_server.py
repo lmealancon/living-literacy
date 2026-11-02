@@ -23,6 +23,7 @@ from prototype.instructional_content import CONTENT_PATH
 from prototype.lesson_engine import PolicyError, ConflictError
 from prototype.persistent_store import SyntheticSQLiteStore
 from prototype.synthetic_auth import SyntheticParentAuth, resolve
+from prototype.family_insights import SyntheticFamilyInsights
 
 WEB = Path(__file__).parent / 'web'
 MAX_REQUEST = 4096
@@ -79,6 +80,7 @@ class App:
             raise ValueError('Gateway secret requires private staging mode')
         self.store = SyntheticSQLiteStore(filename)
         self.auth = SyntheticParentAuth(self.store)
+        self.family_insights = SyntheticFamilyInsights(self.store)
         self.csrf_secret = secrets.token_bytes(32)
 
     def csrf(self, token):
@@ -187,6 +189,10 @@ def make_handler(app):
                 if path == '/api/lessons':
                     return self.send_body(200, {'lessons': app.lessons()})
                 parts = path.strip('/').split('/')
+                if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'interests':
+                    return self.send_body(200, app.family_insights.get_interests(token, unquote(parts[2])))
+                if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'activity':
+                    return self.send_body(200, app.family_insights.activity_summary(token, unquote(parts[2])))
                 if len(parts) == 4 and parts[:2] == ['api', 'lessons']:
                     lesson = app.store.content_for_demo(unquote(parts[2]), unquote(parts[3]))
                     return self.send_body(200, {'lesson': lesson})
@@ -238,6 +244,9 @@ def make_handler(app):
                     session = app.store.start(token, data['student_id'], data['lesson_id'], data['version'], key)
                     return self.send_body(201, {'session': asdict(session)})
                 parts = path.strip('/').split('/')
+                if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'interests':
+                    result = app.family_insights.set_interests(token, unquote(parts[2]), data['interests'])
+                    return self.send_body(200, result)
                 if len(parts) == 4 and parts[:2] == ['api', 'sessions'] and parts[3] == 'action':
                     sid = unquote(parts[2]); action = data['action']; revision = data['revision']
                     if not isinstance(revision, int) or isinstance(revision, bool):
