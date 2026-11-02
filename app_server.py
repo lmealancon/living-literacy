@@ -6,7 +6,10 @@ is not a production service and must never be used for real student data.
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import json
+import os
+import re
 import secrets
 import sqlite3
 from dataclasses import asdict
@@ -25,6 +28,34 @@ WEB = Path(__file__).parent / 'web'
 MAX_REQUEST = 4096
 
 
+def validate_staging_config(origin, proxy_secret):
+    """Validate opt-in private HTTPS staging configuration, never real-data auth."""
+    if not isinstance(origin, str) or not re.fullmatch(
+            r'https://[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?', origin):
+        raise ValueError('Staging origin must be an exact lowercase HTTPS origin')
+    parsed = urlsplit(origin)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError('Invalid staging port') from exc
+    host = parsed.hostname
+    if (not host or '.' not in host or '..' in host or host.endswith('.local')
+            or any(not label or len(label) > 63 or label.startswith('-') or label.endswith('-')
+                   for label in host.split('.')) or port == 0):
+        raise ValueError('Staging requires a valid public DNS name')
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError('Staging origin must use a DNS name, not an IP address')
+    # Restrict the syntax so the shared value cannot break common gateway
+    # configuration files. This check does not establish secret entropy.
+    if not isinstance(proxy_secret, str) or not re.fullmatch(r'[A-Za-z0-9_-]{32,256}', proxy_secret):
+        raise ValueError('A 32–256 character URL-safe gateway secret is required')
+    return parsed.netloc
+
+
 def bootstrap(filename, identity, password):
     """Create fictional account and simulated review fixtures in a fresh database."""
     if not identity.startswith('synthetic-'):
@@ -40,7 +71,12 @@ def bootstrap(filename, identity, password):
 
 
 class App:
-    def __init__(self, filename):
+    def __init__(self, filename, *, staging_origin=None, proxy_secret=None):
+        self.staging_origin = staging_origin
+        self.proxy_secret = proxy_secret
+        self.staging_host = validate_staging_config(staging_origin, proxy_secret) if staging_origin else None
+        if not staging_origin and proxy_secret is not None:
+            raise ValueError('Gateway secret requires private staging mode')
         self.store = SyntheticSQLiteStore(filename)
         self.auth = SyntheticParentAuth(self.store)
         self.csrf_secret = secrets.token_bytes(32)
@@ -113,13 +149,28 @@ def make_handler(app):
                 return ''
 
         def valid_host(self):
+            if getattr(app, 'staging_origin', None):
+                return self.headers.get('Host') == app.staging_host
             return self.headers.get('Host') == '127.0.0.1:' + str(self.server.server_port)
 
         def valid_origin(self):
+            if getattr(app, 'staging_origin', None):
+                return self.headers.get('Origin') == app.staging_origin
             return self.headers.get('Origin') == 'http://127.0.0.1:' + str(self.server.server_port)
 
+        def valid_gateway(self):
+            if not getattr(app, 'staging_origin', None):
+                return True
+            try:
+                peer = ipaddress.ip_address(self.client_address[0])
+                received = self.headers.get('X-Living-Literacy-Gateway', '')
+                return (peer.is_loopback and isinstance(received, str) and received.isascii()
+                        and hmac.compare_digest(received, app.proxy_secret))
+            except (ValueError, IndexError, TypeError, AttributeError):
+                return False
+
         def do_GET(self):
-            if not self.valid_host():
+            if not self.valid_gateway() or not self.valid_host():
                 return self.send_body(403, {'error': 'Forbidden'})
             path = urlsplit(self.path).path
             static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8')}
@@ -150,7 +201,7 @@ def make_handler(app):
                 return self.send_body(503, {'error': 'Service unavailable'})
 
         def do_POST(self):
-            if not self.valid_host() or not self.valid_origin():
+            if not self.valid_gateway() or not self.valid_host() or not self.valid_origin():
                 return self.send_body(403, {'error': 'Forbidden'})
             if self.headers.get('Content-Type', '').split(';')[0].strip() != 'application/json':
                 return self.send_body(415, {'error': 'JSON required'})
@@ -167,14 +218,16 @@ def make_handler(app):
                     if not isinstance(identity, str) or len(identity) > 100:
                         raise ValueError('Invalid identity')
                     token = app.auth.login(identity, password)
-                    return self.send_body(200, {'identity': identity, 'csrf': app.csrf(token)}, cookie='ll_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600')
+                    secure = '; Secure' if app.staging_origin else ''
+                    return self.send_body(200, {'identity': identity, 'csrf': app.csrf(token)}, cookie='ll_session=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600' + secure)
                 token = self.token()
                 app.identity(token)
                 if not hmac.compare_digest(self.headers.get('X-CSRF-Token', ''), app.csrf(token)):
                     return self.send_body(403, {'error': 'Forbidden'})
                 if path == '/api/logout':
                     app.auth.logout(token)
-                    return self.send_body(200, {'ok': True}, cookie='ll_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+                    secure = '; Secure' if app.staging_origin else ''
+                    return self.send_body(200, {'ok': True}, cookie='ll_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + secure)
                 if path == '/api/profiles':
                     profile = app.store.create_synthetic_profile(token, data['anchor_id'], data['student_id'])
                     return self.send_body(201, {'profile': profile})
@@ -224,7 +277,16 @@ def main():
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--container-demo', action='store_true',
                         help='Allow container-network access; only use with a loopback-published local demo')
+    parser.add_argument('--private-staging-origin', help='Exact HTTPS origin for staging behind a same-host private gateway')
     args = parser.parse_args()
+    if args.private_staging_origin and (args.container_demo or args.init):
+        parser.error('Private staging cannot be combined with --container-demo or --init')
+    proxy_secret = os.environ.get('LIVING_LITERACY_STAGING_PROXY_SECRET') if args.private_staging_origin else None
+    if args.private_staging_origin:
+        try:
+            validate_staging_config(args.private_staging_origin, proxy_secret)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.init:
         if Path(args.db).exists():
             raise SystemExit('Database already exists; refusing to overwrite')
@@ -240,7 +302,10 @@ def main():
     bind_host = '0.0.0.0' if args.container_demo else '127.0.0.1'
     if args.container_demo:
         print('WARNING: container-network listener; restrict port publishing to localhost. Synthetic data only.', flush=True)
-    server = ThreadingHTTPServer((bind_host, args.port), make_handler(App(args.db)))
+    app = App(args.db, staging_origin=args.private_staging_origin, proxy_secret=proxy_secret) if args.private_staging_origin else App(args.db)
+    server = ThreadingHTTPServer((bind_host, args.port), make_handler(app))
+    if args.private_staging_origin:
+        print('WARNING: private HTTPS staging requires an authenticated same-host gateway; synthetic data only.', flush=True)
     print('Synthetic-only local app at http://127.0.0.1:%s' % server.server_port, flush=True)
     server.serve_forever()
 

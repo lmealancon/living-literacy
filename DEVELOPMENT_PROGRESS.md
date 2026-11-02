@@ -83,3 +83,17 @@ Community Edition is not finished: real role/relationship/consent enforcement, i
 The owner chose AGPL-3.0 for the software; the repository applies version 3 only (AGPL-3.0-only), with the full text in `LICENSE`. The owner also approved the current Living Literacy name and included sample content and documents for the proposed public repository. The software license does not automatically confer a separate educational-content or trademark license. Contributor terms, private reporting routes and detailed third-party/content provenance remain to be resolved. Earlier entries describing the license decision as pending are historical.
 
 The approval to publish source does not authorize live operation with real child data, scientific claims, or production release.
+
+## Private online staging preparation
+
+`prototype/app_server.py` now supports an explicit HTTPS-origin staging mode behind a same-host authenticated gateway: it retains a loopback-only app listener, requires a server-held gateway secret for every request, validates Host and Origin, and sets Secure cookies. Default localhost and container modes remain intact. `tests/test_private_staging.py` covers the new boundary and preserves content withdrawal. `deploy/private-staging/README.md` and `Caddyfile.example` describe a restricted gateway deployment.
+
+`python3 -m unittest discover -s tests -q` passed 120 tests. Registry validation and JavaScript syntax checks passed. The tests exercise handlers in process only; no browser, actual TLS gateway, Caddy configuration, hosted instance, rate limiter, live URL, or backup on a host has been verified. No provider has been configured. The Caddy example is not a ready-to-deploy public service. An experienced operator must establish restricted access, review gateway configuration and implement independently tested rate limiting and monitoring before private fictional-data staging. Real student data, family onboarding and production release remain blocked by the release gates.
+
+## Free hosting investigation and Render staging scaffold
+
+The user requested no Lovable service and no associated Lovable charges. The separate existing Lovable project was inspected read-only and was not edited or deployed. Its existing scoring and lesson rules differ from this project, and the latest tool check showed its original commit unchanged.
+
+Added `deploy/render/` and `tests/test_render_staging.py` for experimental restricted synthetic staging using the existing Python engine behind an authenticated nginx gateway. Render's free local filesystem is ephemeral, so all synthetic progress is discarded at restart or idle spin-down. This is not a durable website or a production service for families. Render free tier and billing terms require review before account use. Matching AGPL source must be public before network use; `prototype/web/index.html` links to the source repository, but this local revision has not been uploaded to the public GitHub repository.
+
+Final local verification: `python3 -m unittest discover -s tests -q` passed 127 tests; registry validation and JavaScript syntax checks passed. Docker daemon access was denied and nginx was unavailable, so the container, proxy, TLS, authentication via real browser, Render deployment and any public URL are unverified. The template must not be represented as safe for real children or ready for production. Further work is required for durable data, secure real-family identity and authorization, content review and deployment.
