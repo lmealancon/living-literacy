@@ -1,0 +1,20 @@
+# EXAMPLE ONLY: review, adapt, and validate with your Caddy version before use.
+# Run Caddy on the SAME HOST and network namespace as the Python application.
+# Each env var below must be provided to the Caddy process, never committed.
+# The allowed CIDR must be a trusted, independently verified client network.
+{$LIVING_LITERACY_STAGING_HOST} {
+    route {
+        @outside not remote_ip {$LIVING_LITERACY_ALLOWED_CIDR}
+        respond @outside "Not found" 404
+
+        # Credential is separate from the application's synthetic sign-in.
+        basic_auth {
+            {$LIVING_LITERACY_GATEWAY_USER} {$LIVING_LITERACY_GATEWAY_PASSWORD_HASH}
+        }
+
+        reverse_proxy 127.0.0.1:8765 {
+            # Replace any client-supplied value with the server-held secret.
+            header_up X-Living-Literacy-Gateway {$LIVING_LITERACY_STAGING_PROXY_SECRET}
+        }
+    }
+}
