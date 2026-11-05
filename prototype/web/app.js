@@ -2,6 +2,46 @@
 // Synthetic-data prototype. All access and content checks are enforced by the server.
 const $ = id => document.getElementById(id);
 const state = { csrf: null, identity: null, profiles: [], lessons: [], profile: null, session: null, history: [], epoch: 0 };
+// Motion is optional; never override a device-level reduced-motion preference.
+const motionButton = $('motion-toggle');
+const motionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+let deviceReducesMotion = Boolean(motionQuery?.matches);
+let userReducesMotion = false;
+try { userReducesMotion = localStorage.getItem('living-literacy-reduce-motion') === 'true'; } catch (_) { /* Preference remains in memory. */ }
+function applyMotionPreference() {
+  const reduced = deviceReducesMotion || userReducesMotion;
+  document.documentElement?.setAttribute('data-motion', reduced ? 'off' : 'on');
+  motionButton.setAttribute('aria-pressed', String(reduced));
+  motionButton.disabled = deviceReducesMotion;
+  motionButton.textContent = deviceReducesMotion ? 'Motion reduced by device' : 'Reduce motion';
+}
+motionButton.addEventListener('click', () => {
+  if (deviceReducesMotion) return;
+  userReducesMotion = !userReducesMotion;
+  try { localStorage.setItem('living-literacy-reduce-motion', String(userReducesMotion)); } catch (_) { /* Preference remains in memory. */ }
+  applyMotionPreference();
+});
+function deviceMotionChanged(event) {
+  deviceReducesMotion = Boolean(event.matches);
+  applyMotionPreference();
+}
+if (motionQuery && typeof motionQuery.addEventListener === 'function') motionQuery.addEventListener('change', deviceMotionChanged);
+else if (motionQuery && typeof motionQuery.addListener === 'function') motionQuery.addListener(deviceMotionChanged);
+applyMotionPreference();
+// A learner or adult may choose a quieter appearance; it is never inferred by age.
+const visualsButton = $('visuals-toggle');
+let simpleVisuals = false;
+try { simpleVisuals = localStorage.getItem('living-literacy-simple-visuals') === 'true'; } catch (_) { /* Preference remains in memory. */ }
+function applyVisualPreference() {
+  document.documentElement?.setAttribute('data-visuals', simpleVisuals ? 'simple' : 'standard');
+  visualsButton.setAttribute('aria-pressed', String(simpleVisuals));
+}
+visualsButton.addEventListener('click', () => {
+  simpleVisuals = !simpleVisuals;
+  try { localStorage.setItem('living-literacy-simple-visuals', String(simpleVisuals)); } catch (_) { /* Preference remains in memory. */ }
+  applyVisualPreference();
+});
+applyVisualPreference();
 const ongoing = session => ['created', 'active', 'paused'].includes(session.status);
 const snapshot = () => ({epoch: state.epoch, identity: state.identity, profile: state.profile});
 const current = stamp => stamp.epoch === state.epoch && stamp.identity === state.identity && stamp.profile === state.profile;
@@ -46,6 +86,7 @@ function button(text, callback, primary = false) {
 function show(view) {
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
   $('logout').hidden = !state.identity;
+  document.body?.setAttribute('data-view', view);
 }
 function friendlyError(error) {
   if (error.status === 401 || error.status === 403) return 'Your session may have expired, or this action is unavailable. Please sign in again or contact the prototype administrator.';
@@ -110,10 +151,11 @@ function renderLessons() {
   if (!state.lessons.length) { area.append(el('p', 'No approved prototype activities are available.')); return; }
   state.lessons.forEach(lesson => {
     let pendingKey = null;
-    const row = el('div', undefined, 'item');
+    const row = el('div', undefined, 'item activity-item');
+    const icon = el('span', '✦', 'activity-icon'); icon.setAttribute('aria-hidden', 'true');
     const details = el('div');
-    details.append(el('strong', lesson.title), el('p', 'Six stages · Prototype only', 'fine'));
-    row.append(details, button('Start', async () => {
+    details.append(el('span', 'Reading journey', 'activity-kicker'), el('strong', lesson.title), el('p', 'Six stages · Prototype only', 'fine'));
+    row.append(icon, details, button('Start', async () => {
       const stamp = snapshot();
       try {
         message('');
@@ -269,20 +311,42 @@ async function openSession() {
     form.append(prompt, answer, assistanceFieldset, submit);
     if (session.lesson_id === 'synthetic-lesson-word-study' && step.id === 'practice') {
       const builder = el('div', undefined, 'word-builder');
-      builder.append(el('p', 'Build a word with these letters. Choose a letter, then choose another.'));
+      builder.append(el('p', 'Build a word: tap the letters, or drag them into the tray.'));
       const built = el('output', '', 'built-word'); built.setAttribute('aria-live', 'polite');
-      built.setAttribute('aria-label', 'Letters selected');
+      built.setAttribute('aria-label', 'Word tray: letters selected');
       const letters = el('div', undefined, 'letter-choices');
-      const tiles = [];
-      ['p', 'm', 'a'].forEach(letter => {
-        const tile = button(letter, () => {
-          if (tile.disabled) return;
-          tile.disabled = true; built.textContent += letter; answer.value = built.textContent;
+      const tiles = []; const selected = []; const symbols = ['p', 'm', 'a'];
+      function updateTray() {
+        built.textContent = selected.map(index => symbols[index]).join('');
+        answer.value = built.textContent;
+      }
+      function chooseLetter(index) {
+        if (!Number.isInteger(index) || index < 0 || index >= tiles.length || tiles[index].disabled) return;
+        tiles[index].disabled = true; selected.push(index); updateTray();
+      }
+      symbols.forEach((letter, index) => {
+        const tile = button(letter, () => chooseLetter(index));
+        tile.className = 'letter-tile'; tile.setAttribute('aria-label', 'Add letter ' + letter);
+        tile.setAttribute('draggable', 'true');
+        tile.addEventListener('dragstart', event => {
+          if (tile.disabled) { event.preventDefault(); return; }
+          event.dataTransfer.setData('text/plain', String(index));
+          event.dataTransfer.effectAllowed = 'move';
         });
         tiles.push(tile); letters.append(tile);
       });
+      built.addEventListener('dragover', event => event.preventDefault());
+      built.addEventListener('drop', event => {
+        event.preventDefault();
+        const value = event.dataTransfer.getData('text/plain');
+        if (/^[0-2]$/.test(value)) chooseLetter(Number(value));
+      });
+      letters.append(button('Undo last letter', () => {
+        if (!selected.length) return;
+        tiles[selected.pop()].disabled = false; updateTray();
+      }));
       letters.append(button('Clear letters', () => {
-        built.textContent = ''; answer.value = ''; tiles.forEach(tile => { tile.disabled = false; });
+        selected.length = 0; tiles.forEach(tile => { tile.disabled = false; }); updateTray();
       }));
       builder.append(letters, built);
       responses.append(builder);
