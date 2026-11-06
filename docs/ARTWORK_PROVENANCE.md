@@ -2,7 +2,8 @@
 
 `prototype/web/hero-world.png` is an original character-free background generated
 for the Living Literacy synthetic welcome-page prototype using an
-image-generation tool. The prompt described a reading garden; it
+image-generation tool. The current prompt described a fictional Victorian
+London-inspired street with bookshops and a river; it
 did not request or include the names, characters, logos, or proprietary artwork
 of any other platform. It is not a lesson or assessment asset.
 

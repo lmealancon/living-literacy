@@ -64,7 +64,12 @@ class AppServerTests(unittest.TestCase):
 
     def test_reading_world_assets_are_served_with_expected_types(self):
         for path, expected in [('/reading-world.js', 'application/javascript; charset=utf-8'),
-                               ('/reading-world.css', 'text/css; charset=utf-8')]:
+                               ('/reading-world.css', 'text/css; charset=utf-8'),
+                               ('/world3d-engine.js', 'application/javascript; charset=utf-8'),
+                               ('/world3d-journey.js', 'application/javascript; charset=utf-8'),
+                               ('/investigation-reading.js', 'application/javascript; charset=utf-8'),
+                               ('/world3d-ui.js', 'application/javascript; charset=utf-8'),
+                               ('/world3d.css', 'text/css; charset=utf-8')]:
             with self.subTest(path=path):
                 request = self.handler.__new__(self.handler)
                 request.server = SimpleNamespace(server_port=8765)

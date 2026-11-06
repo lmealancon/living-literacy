@@ -233,3 +233,75 @@ and it does not enable real-child use, a new lesson library or live AI.
 The generated background and character are still pending owner review for
 publication. Next bounded task: obtain the owner's visual review and run
 real-browser interaction and accessibility tests before expanding the world.
+
+## Original 3D Reading Garden prototype
+
+The owner requested an explorable 3D game with a reading companion and learning
+journey. `prototype/web/world3d-engine.js` renders an original low-poly world
+using native WebGL, with a third-person companion, terrain, trees, paths, and
+three landmark gates. `world3d-ui.js` and `world3d.css` provide keyboard and
+touch controls, a color legend, journey status, simplified-visual controls, and
+a direct-navigation fallback when WebGL is unavailable. No external engine,
+game artwork, model weights or paid service is bundled.
+
+`prototype/web/world3d-journey.js` tracks an ephemeral synthetic journey. The
+activity destination leads to the existing authorized activity selector. The
+journey binds only after the server creates a matching session and its content
+passes the existing availability check; only a matching, newer, server-returned
+completed session can mark the activity complete. This is not mastery. The game
+pauses during lessons and resets on sign-out or profile change. Existing
+fictional-data authorization, withdrawal and assistance checks remain in force.
+
+`prototype/app_server.py` serves the four new static assets. Engine, HUD,
+journey and app-integration harnesses exercise mocked WebGL, movement, fallback
+including graphics-context loss, touch controls, lifecycle, lesson completion,
+stale sessions and withdrawal. Lost graphics are not automatically restored.
+The full local suite passed 237 tests, JavaScript syntax checks passed, and
+`git diff --check` passed. Actual GPU rendering, mobile touch, screen-reader
+behavior and full browser end-to-end flows remain unverified; the environment
+previously blocked Chromium's sandbox socket. Changes are local, not deployed.
+
+This is a small synthetic 3D prototype with one existing fictional sample
+activity, not the requested complete game, production service, or a finished
+AI companion. No AI conversation or microphone is enabled on Render; model
+hosting, child-safe behavior, verified authorization, privacy controls,
+reviewed content, and educational validation remain outstanding. Next bounded
+task: verify the world in a real browser and integrate reviewed activities and a
+separately reviewed companion service without bypassing lesson protections.
+
+## The Vanishing Storybook investigation
+
+The owner requested a clue-led reading investigation in Victorian London.
+`prototype/web/world3d-engine.js` now renders an original, imagined London
+street with a Post Office, City Archive, Bookshop and a moving companion.
+The fallback map uses the same locations. `prototype/web/hero-world.png` is a
+new generated character-free city illustration; `docs/ARTWORK_PROVENANCE.md`
+records its origin and pending owner review.
+
+`prototype/web/investigation-reading.js` contains three original fictional,
+unreviewed adult-demo practice candidates. `world3d-journey.js` enforces a
+three-clue case order, evaluates the selected answer before awarding each clue,
+and tracks hints in temporary state. The archive clue also opens the existing
+authorized fictional map lesson. A matching server-returned completed session
+must contain a nonempty practice response to continue; this does not establish
+its correctness or any reading ability. The case resets on reload, sign-out or
+profile change and does not store learning data. Lesson interruptions and
+withdrawal return the case to a retryable state. The game HUD displays the
+casebook, clues, reading prompts and locked locations. No real student data or
+child use is supported.
+
+`tools/offline-case-preview.js` is a local-file-only fictional simulator used
+solely in a separately packaged review preview. It is not included in the live
+web page or deployed server. Tests cover the three-clue case, wrong answers,
+hint state, locked destinations, profile/identity changes, stale responses,
+missing practice, retry after leaving or withdrawal, optional browser graphics
+fallback, and the offline simulator. `docs/INVESTIGATION_CASE.md` records the
+scope, provenance and review gates. Automated checks cannot establish teaching
+quality, child safety or browser accessibility. The original content and art
+need owner and qualified educational review before publication or student use;
+there is still no live AI tutor or speech conversation on Render. Real browser,
+GPU, touch and screen-reader behavior remain unverified.
+
+Verification: `python3 -m unittest discover -s tests -q` passed 239 tests;
+JavaScript syntax checks and `git diff --check` passed. These include mocked
+browser, GPU, model and API components rather than real-device validation.

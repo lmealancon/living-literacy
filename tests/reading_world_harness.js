@@ -39,15 +39,15 @@ function setup(withCanvas = true) {
   for(let i=0;i<4;i++) assert.equal(key('ArrowUp'),true);
   assert.equal(key('Enter'),true);
   assert.deepEqual(h.visits,['activities'],'walking near the grove and Enter visits the actual activity destination');
-  h.find(el=>el.textContent==='Welcome Gate').events.click();
-  h.find(el=>el.textContent==='Companion Corner').events.click();
+  h.find(el=>el.textContent==='Bookshop').events.click();
+  h.find(el=>el.textContent==='Post Office').events.click();
   assert.deepEqual(h.visits,['activities','signin','voice']);
   h.controller.pause();
-  h.find(el=>el.textContent==='Welcome Gate').events.click();
+  h.find(el=>el.textContent==='Bookshop').events.click();
   assert.equal(h.visits.length,3,'paused scene does not navigate');
   h.controller.resume();
   h.controller.reset();
-  h.find(el=>el.textContent==='Welcome Gate').events.click();
+  h.find(el=>el.textContent==='Bookshop').events.click();
   assert.equal(h.visits.at(-1),'signin');
   h.controller.destroy();
   assert.equal(h.root.children.length,0);
@@ -56,7 +56,7 @@ function setup(withCanvas = true) {
   const h=setup(false);
   assert(h.find(el=>el.tagName==='canvas').hidden,'failed canvas hides the map');
   assert.match(h.find(el=>el.attributes.role==='status').textContent,/unavailable/i);
-  h.find(el=>el.textContent==='Activity Grove').events.click();
+  h.find(el=>el.textContent==='Archive').events.click();
   assert.deepEqual(h.visits,['activities'],'text navigation remains available without a canvas');
 }
 console.log('Reading Garden interactions passed');

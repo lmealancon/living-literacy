@@ -4,10 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Living Literacy synthetic learning prototype">
-  <title>Living Literacy | Family workspace</title>
+  <title>Living Literacy | The Vanishing Storybook</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/reading-world.css">
+  <link rel="stylesheet" href="/world3d.css">
   <script src="/reading-world.js" defer></script>
+  <script src="/world3d-engine.js" defer></script>
+  <script src="/investigation-reading.js" defer></script>
+  <script src="/world3d-journey.js" defer></script>
+  <script src="/world3d-ui.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -16,10 +21,10 @@
 <main id="main" tabindex="-1">
   <div class="hero">
     <div class="hero-copy">
-      <p class="eyebrow hero-eyebrow"><span aria-hidden="true">✦</span> Every child deserves to read</p>
-      <h1>Little words.<br><em>Big adventures.</em></h1>
-      <p class="lead">Every story starts somewhere. Come explore, play with words, and discover what you can do.</p>
-      <div class="hero-actions"><a class="hero-button" href="#login-title">Explore the demo <span aria-hidden="true">→</span></a><button id="hero-greet" class="hero-greet" type="button">Wave hello <span aria-hidden="true">✦</span></button><span class="hero-action-note">For grown-ups to explore</span></div>
+      <p class="eyebrow hero-eyebrow"><span aria-hidden="true">✦</span> A reading mystery awaits</p>
+      <h1>A missing book.<br><em>A city of clues.</em></h1>
+      <p class="lead">Explore a fictional Victorian London with your companion. Read clues, solve puzzles, and uncover the vanishing storybook.</p>
+      <div class="hero-actions"><a class="hero-button" href="#world3d-root">Explore the mystery <span aria-hidden="true">→</span></a><button id="hero-greet" class="hero-greet" type="button">Wave hello <span aria-hidden="true">✦</span></button><span class="hero-action-note">Fictional adult demonstration</span></div>
       <div class="companion-welcome-message"><p class="eyebrow">Your reading companion</p><p id="companion-greeting" aria-live="polite">Hello! Welcome to our reading adventure. Sign in to explore the fictional demo.</p><div class="companion-links" id="companion-login-links"><a href="#login-title">Go to sign in</a></div><div class="companion-links" id="companion-dashboard-links" hidden><a href="#profiles-title">Choose a profile</a><a href="#lesson-list-title">Explore activities</a><a href="#voice-demo-title">Try the voice sample</a></div></div>
     </div>
     <div class="hero-scene companion-welcome" aria-hidden="true">
@@ -51,11 +56,12 @@
     </svg></div>
       <div class="hero-art-sparkle hero-art-sparkle-one">✦</div><div class="hero-art-sparkle hero-art-sparkle-two">✳</div>
 
-      <div class="hero-caption"><span class="hero-caption-icon">✦</span><span>Curiosity grows here<small>One little adventure at a time</small></span></div>
+      <div class="hero-caption"><span class="hero-caption-icon">✦</span><span>The Vanishing Storybook<small>An original fictional case</small></span></div>
     </div>
   </div>
   <aside class="notice"><strong>Adult demonstration · Fictional information only.</strong> This is a development prototype. Do not enter real names, student details, or real credentials. Lessons are not validated assessments. On the free Render test service, saved activity is erased when the service sleeps or restarts.</aside>
-  <div id="reading-world-root"></div>
+  <div id="world3d-root"></div>
+  <div id="reading-world-root" hidden></div>
   <p id="message" role="status" aria-live="polite" hidden></p>
   <section id="login-view" class="card narrow" aria-labelledby="login-title">
     <p class="eyebrow">Family workspace</p><h2 id="login-title">Welcome back</h2>

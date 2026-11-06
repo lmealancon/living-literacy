@@ -1,0 +1,42 @@
+/* Original fictional investigation controls. No remote fonts or dependencies. */
+.world3d {position:relative;margin:1.5rem 0;padding:clamp(1rem,2.6vw,1.8rem);overflow:hidden;border:1px solid #d8c7a8;border-radius:24px;background:linear-gradient(145deg,#fbf5e8,#f3ead9);color:#263849;box-shadow:0 12px 28px #172a3d20}
+.world3d-header {display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.world3d-eyebrow {margin:0;color:#8c5422;font:800 .72rem/1.3 system-ui,sans-serif;letter-spacing:.13em;text-transform:uppercase}
+.world3d-title {margin:.25rem 0;color:#203954;font:800 clamp(1.65rem,3vw,2.3rem)/1.08 Georgia,serif;letter-spacing:-.025em}
+.world3d-subtitle {margin:.4rem 0 0;color:#46645c;line-height:1.45}
+.world3d button {min-height:46px;border:1px solid #a8c8bd;border-radius:12px;background:#fff;color:#204b42;font:700 1rem/1.2 system-ui,sans-serif;cursor:pointer}
+.world3d button:hover:not(:disabled) {background:#e9f7ed;border-color:#5d997b}
+.world3d button:focus-visible,.world3d-canvas:focus-visible {outline:3px solid #174db4;outline-offset:3px}
+.world3d button:disabled {opacity:.5;cursor:default}
+.world3d-exit {padding:.7rem .9rem}
+.world3d-stage {position:relative;overflow:hidden;min-height:14rem;border:3px solid #fff;border-radius:20px;background:linear-gradient(#b7e3ff,#ecf5d6 62%,#91c97a);box-shadow:0 8px 22px #18493624}
+.world3d-stage[hidden] {display:none}
+.world3d-canvas {display:block;width:100%;height:auto;aspect-ratio:16/9;outline-offset:-5px;touch-action:manipulation}
+.world3d-canvas[hidden] {display:none}
+.world3d-quest {display:grid;gap:.5rem;margin-top:1rem;padding:1.1rem 1.25rem;border:1px solid #dbc6a1;border-left:5px solid #bc8036;border-radius:14px;background:#fffdf5;box-shadow:0 3px 12px #7352250c}
+.world3d-quest-title {margin:0;color:#263f59;font:800 1.2rem/1.3 Georgia,serif}
+.world3d-quest-message {margin:0;color:#354b5b;line-height:1.5}
+.world3d-visited {width:100%;margin:0;color:#597269;font-size:.83rem;line-height:1.4}
+.world3d-clues-title {margin:.5rem 0 0;color:#805324;font:800 .75rem/1.3 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.world3d-clues {display:grid;gap:.5rem;margin:0;padding-left:1.35rem;color:#3d4e53}
+.world3d-clue {padding:.3rem 0}.world3d-clue strong {color:#253e57}.world3d-clue p {margin:.2rem 0 0;line-height:1.5}.world3d-clue-empty {color:#65767d;font-style:italic}
+.world3d-clue-hint {display:inline-block;margin-left:.55rem;padding:.18rem .45rem;border-radius:99px;background:#f2e4c7;color:#654c2e;font:700 .72rem/1.3 system-ui,sans-serif}
+.world3d-challenge {display:grid;gap:.65rem;margin-top:1rem;padding:clamp(1rem,2.6vw,1.5rem);border:2px solid #d4b581;border-radius:18px;background:#fffaf0;box-shadow:0 8px 25px #73522512}
+.world3d-challenge[hidden] {display:none}.world3d-challenge-label {margin:0;color:#825327;font:800 .7rem/1.3 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+.world3d-challenge-title {margin:0;color:#233c58;font:800 clamp(1.2rem,2.5vw,1.6rem)/1.2 Georgia,serif}.world3d-challenge-teaching,.world3d-challenge-prompt {margin:0;color:#334a59;line-height:1.55}.world3d-challenge-prompt {font-weight:800}
+.world3d-challenge-passage {margin:.2rem 0;padding:.85rem 1rem;border-left:4px solid #c18d45;background:#f4ead7;color:#364756;line-height:1.6}
+.world3d-challenge-answers {display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.55rem}.world3d .world3d-answer {padding:.75rem;text-align:left;border-color:#c3b28f;background:#fff;color:#263e50}.world3d .world3d-answer:hover:not(:disabled){background:#f7edda}
+.world3d .world3d-hint {justify-self:start;padding:.55rem .85rem;border-color:#c7b79b;background:#fff9ea;color:#604b32}.world3d-hint-text {margin:0;padding:.65rem .8rem;border-radius:10px;background:#fff1c9;color:#58471f}.world3d-hint-text[hidden] {display:none}.world3d-feedback {min-height:1.3em;margin:0;color:#345d4a;font-weight:750;line-height:1.45}
+.world3d-status {margin:1rem 0 .35rem;min-height:1.5em;color:#275143;font-weight:700;line-height:1.4}
+.world3d-instructions {margin:.3rem 0 1rem;color:#526961;font-size:.9rem;line-height:1.5}
+.world3d-legend {margin:-.5rem 0 1rem;color:#3e5b51;font-size:.88rem;line-height:1.45}
+.world3d-controls,.world3d-movement,.world3d-destinations {display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.world3d-controls {gap:1rem}
+.world3d-control-label {margin:.75rem 0 .45rem;color:#4c685e;font-size:.88rem;font-weight:750}
+.world3d .world3d-direction {min-width:48px;padding:.48rem .7rem;font-size:1.3rem;touch-action:manipulation;user-select:none;-webkit-touch-callout:none}
+.world3d .world3d-interact {padding:.7rem 1rem;border-color:#215f50;background:#286d59;color:#fff}
+.world3d .world3d-interact:hover:not(:disabled) {background:#1b5142}
+.world3d .world3d-destination {padding:.68rem .9rem;background:#f9fffa}
+html[data-visuals="simple"] .world3d-stage,html[data-visuals="simple"] .world3d-controls,html[data-visuals="simple"] .world3d-instructions {display:none}
+@media(max-width:600px) {.world3d {padding:1rem;margin:1rem 0}.world3d-header{align-items:flex-start}.world3d-stage{min-height:10rem}.world3d-controls{gap:.7rem}.world3d-movement{width:100%}.world3d-destinations{display:grid;grid-template-columns:1fr}.world3d .world3d-destination{text-align:left}}
+@media(prefers-reduced-motion:reduce) {.world3d *, .world3d *::before, .world3d *::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}

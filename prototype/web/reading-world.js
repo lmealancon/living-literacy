@@ -5,9 +5,9 @@
 (function (global) {
   const WIDTH = 960, HEIGHT = 540, STEP = 0.075, REACH = 0.17;
   const DESTINATIONS = Object.freeze([
-    Object.freeze({id:'signin', name:'Welcome Gate', x:0.18, y:0.61, icon:'✦', color:'#f4aa55'}),
-    Object.freeze({id:'activities', name:'Activity Grove', x:0.48, y:0.36, icon:'▤', color:'#5e92df'}),
-    Object.freeze({id:'voice', name:'Companion Corner', x:0.81, y:0.53, icon:'♥', color:'#ed8091'})
+    Object.freeze({id:'signin', name:'Bookshop', x:0.18, y:0.61, icon:'✦', color:'#f4aa55'}),
+    Object.freeze({id:'activities', name:'Archive', x:0.48, y:0.36, icon:'▤', color:'#5e92df'}),
+    Object.freeze({id:'voice', name:'Post Office', x:0.81, y:0.53, icon:'♥', color:'#ed8091'})
   ]);
   const clamp = value => Math.max(0.055, Math.min(0.945, value));
   const node = (tag, className, text) => {
@@ -26,15 +26,15 @@
     section.setAttribute('aria-labelledby', 'reading-world-title');
     const intro = node('div', 'reading-world-intro');
     const eyebrow = node('p', 'reading-world-eyebrow', 'Your world to explore');
-    const heading = node('h2', 'reading-world-heading', 'Welcome to the Reading Garden');
+    const heading = node('h2', 'reading-world-heading', 'Explore Victorian London');
     heading.id = 'reading-world-title';
-    const description = node('p', 'reading-world-description', 'Move your companion through the garden and explore a destination. You can also choose a destination directly below.');
+    const description = node('p', 'reading-world-description', 'Move through the fictional city to investigate. You can also choose a location directly below.');
     intro.append(eyebrow, heading, description);
     const frame = node('div', 'reading-world-frame');
     const canvas = node('canvas', 'reading-world-canvas');
     canvas.width = WIDTH; canvas.height = HEIGHT; canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', 'Reading Garden map. While focused, use arrow keys or W A S D to move. Press Enter near a destination to visit it.');
-    const canvasFallback = node('p', '', 'The garden map is unavailable. Use the destination buttons below.');
+    canvas.setAttribute('aria-label', 'Fictional London map. While focused, use arrow keys or W A S D to move. Press Enter near a destination to visit it.');
+    const canvasFallback = node('p', '', 'The city map is unavailable. Use the destination buttons below.');
     canvas.append(canvasFallback);
     frame.append(canvas);
     const status = node('p', 'reading-world-status', 'Choose a direction to begin exploring.');
@@ -141,8 +141,10 @@
     function visit(destination) {
       if (!active || destroyed) return;
       x = destination.x; y = destination.y; paint();
-      status.textContent = 'Visiting ' + destination.name + '.';
-      navigate(destination.id);
+      const accepted = navigate(destination.id);
+      status.textContent = accepted === false
+        ? 'That location is locked. Follow the current clue or sign in.'
+        : 'Visiting ' + destination.name + '.';
     }
     function visitNearby() {
       if (!active || destroyed) return;

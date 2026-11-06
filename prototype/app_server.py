@@ -189,7 +189,7 @@ def make_handler(app):
             if not self.valid_gateway() or not self.valid_host():
                 return self.send_body(403, {'error': 'Forbidden'})
             path = urlsplit(self.path).path
-            static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8'), '/hero-world.png': ('hero-world.png', 'image/png'), '/reading-world.js': ('reading-world.js', 'application/javascript; charset=utf-8'), '/reading-world.css': ('reading-world.css', 'text/css; charset=utf-8')}
+            static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8'), '/hero-world.png': ('hero-world.png', 'image/png'), '/reading-world.js': ('reading-world.js', 'application/javascript; charset=utf-8'), '/reading-world.css': ('reading-world.css', 'text/css; charset=utf-8'), '/investigation-reading.js': ('investigation-reading.js', 'application/javascript; charset=utf-8'), '/world3d-engine.js': ('world3d-engine.js', 'application/javascript; charset=utf-8'), '/world3d-journey.js': ('world3d-journey.js', 'application/javascript; charset=utf-8'), '/world3d-ui.js': ('world3d-ui.js', 'application/javascript; charset=utf-8'), '/world3d.css': ('world3d.css', 'text/css; charset=utf-8')}
             if path in static:
                 name, mime = static[path]
                 return self.send_body(200, (WEB / name).read_bytes(), mime)

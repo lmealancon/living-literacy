@@ -4,6 +4,8 @@ const $ = id => document.getElementById(id);
 const state = { csrf: null, identity: null, profiles: [], lessons: [], profile: null, session: null, history: [], epoch: 0 };
 const conversation = {history: [], version: 0, busy: false, lastReply: '', recognition: null};
 let readingWorld = null;
+let world3d = null;
+let journey = null;
 const guideTimers = new Map();
 // Motion is optional; never override a device-level reduced-motion preference.
 const motionButton = $('motion-toggle');
@@ -90,6 +92,8 @@ function clearProfileData() {
 function clearProtectedData() {
   clearProfileData();
   readingWorld?.reset();
+  world3d?.reset();
+  journey?.reset();
   state.profiles = []; state.lessons = []; state.profile = null;
   $('companion-ai-demo').hidden = true;
   $('companion-conversation').hidden = true;
@@ -178,8 +182,14 @@ function show(view) {
   setGuideMood('hero-animated-guide', view === 'dashboard' ? 'react' : 'idle');
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
   const worldRoot = $('reading-world-root');
-  if (worldRoot) worldRoot.hidden = view === 'lesson-view';
-  if (view === 'lesson-view') readingWorld?.pause(); else readingWorld?.resume();
+  const world3dRoot = $('world3d-root');
+  if (worldRoot) worldRoot.hidden = view === 'lesson-view' || Boolean(world3d?.available);
+  if (world3dRoot) world3dRoot.hidden = view === 'lesson-view';
+  if (view === 'lesson-view') { readingWorld?.pause(); world3d?.pause(); }
+  else {
+    world3d?.resume();
+    if (world3d?.available) readingWorld?.pause(); else readingWorld?.resume();
+  }
   $('companion-greeting').textContent = view === 'dashboard'
     ? 'Welcome back! Choose a fictional profile and an activity to explore together.'
     : 'Hello! Welcome to our reading adventure. Sign in to explore the fictional demo.';
@@ -374,6 +384,7 @@ function renderProfiles() {
     description.append(el('strong', profile.id), el('p', profile.id === state.profile ? 'Selected' : 'Fictional learner', 'fine'));
     row.append(description, button(profile.id === state.profile ? 'Selected' : 'Select', async () => {
       state.epoch++;
+      if (state.profile !== profile.id) { journey?.reset(); world3d?.reset(); }
       clearProfileData();
       state.profile = profile.id;
       const stamp = snapshot();
@@ -404,6 +415,7 @@ function renderLessons() {
         pendingKey = null;
         state.session = result.session;
         await openSession();
+        if (current(stamp) && state.session === result.session) journey?.bindSession(result.session, stamp.profile);
       } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
     }, true));
     area.append(row);
@@ -556,14 +568,14 @@ async function openSession() {
     lesson = data.lesson;
   } catch (_) {
     if (current(stamp) && state.session === session) {
-      clearLessonData(); show('dashboard');
+      journey?.cancelBoundSession(); clearLessonData(); show('dashboard');
       message('This activity is unavailable or has been withdrawn. Its history remains available.', true);
     }
     return;
   }
   if (!current(stamp) || state.session !== session) return;
   if (!lesson || !lesson.stages?.[session.stage_index]) {
-    clearLessonData(); show('dashboard');
+    journey?.cancelBoundSession(); clearLessonData(); show('dashboard');
     message('This activity is unavailable or has been withdrawn. Its history remains available.', true);
     return;
   }
@@ -667,12 +679,13 @@ async function runAction(action, extra = {}) {
     const data = await request('/api/sessions/' + encodeURIComponent(session.session_id) + '/action', {action, revision: session.revision, ...extra});
     if (!current(stamp) || state.session !== session) return;
     state.session = data.session;
+    journey?.observeSession(data.session);
     await openSession();
     // Acknowledges a successful save or completion, not correctness or mastery.
     if (current(stamp) && state.session === data.session && (action === 'respond' || action === 'complete')) {
       setGuideMood('lesson-guide', 'celebrate');
     }
-  } catch (error) { if (current(stamp) && state.session === session) { clearLessonData(); show('dashboard'); message(friendlyError(error), true); } }
+  } catch (error) { if (current(stamp) && state.session === session) { journey?.cancelBoundSession(); clearLessonData(); show('dashboard'); message(friendlyError(error), true); } }
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -711,7 +724,7 @@ $('profile-form').addEventListener('submit', async event => {
   try {
     const data = await request('/api/profiles', {anchor_id: stamp.profile, student_id: $('new-profile').value});
     if (!current(stamp)) return;
-    state.epoch++; activeEpoch = state.epoch; clearProfileData(); state.profile = data.profile.id;
+    state.epoch++; activeEpoch = state.epoch; journey?.reset(); world3d?.reset(); clearProfileData(); state.profile = data.profile.id;
     $('new-profile').value = '';
     message('Fictional profile added.');
     await loadDashboard();
@@ -719,23 +732,55 @@ $('profile-form').addEventListener('submit', async event => {
 });
 $('back').addEventListener('click', async () => {
   const stamp = snapshot();
-  try { message(''); await loadDashboard(); } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
-});
-// The garden only navigates to existing views. The server still authorizes
-// profiles, lessons and every session operation.
-if (typeof window.LivingReadingWorld?.mount === 'function') {
-  readingWorld = window.LivingReadingWorld.mount($('reading-world-root'), {navigate(destination) {
-    const targets = {signin: state.identity ? 'profiles-title' : 'login-title',
-      activities: state.identity ? 'lesson-list-title' : 'login-title',
-      voice: state.identity ? 'voice-demo-title' : 'login-title'};
-    if (!Object.hasOwn(targets, destination)) return;
-    const target = $(targets[destination]);
-    if (target) {
-      target.scrollIntoView?.({behavior: 'auto', block: 'start'});
-      target.setAttribute('tabindex', '-1');
-      target.focus?.({preventScroll: true});
+  try {
+    message(''); await loadDashboard();
+    if (current(stamp) && journey) {
+      if (!journey.returnToWorld()) journey.cancelBoundSession();
+      $('world3d-root')?.scrollIntoView?.({behavior: 'auto', block: 'start'});
     }
-  }});
+  }
+  catch (error) { if (current(stamp)) message(friendlyError(error), true); }
+});
+// World destinations navigate only to existing views. The server still
+// authorizes profiles, lesson content and every session operation.
+function navigateWorld(destination) {
+  const targets = {signin: state.identity ? 'profiles-title' : 'login-title',
+    activities: state.identity ? 'lesson-list-title' : 'login-title',
+    voice: state.identity ? 'voice-demo-title' : 'login-title'};
+  if (!Object.hasOwn(targets, destination)) return;
+  const target = $(targets[destination]);
+  if (target) {
+    target.scrollIntoView?.({behavior: 'auto', block: 'start'});
+    target.setAttribute('tabindex', '-1');
+    target.focus?.({preventScroll: true});
+  }
+}
+// Keep the fictional case tied to the selected signed-in demo profile. Case
+// state itself is temporary client-side game state, not an authorization gate.
+function visitCase(destination) {
+  if (!state.identity || !state.profile) {
+    message('Sign in and select a fictional profile to investigate this case.');
+    navigateWorld('signin');
+    return false;
+  }
+  return journey ? journey.visit(destination) : false;
+}
+if (typeof window.LivingJourney?.create === 'function' && typeof window.LivingWorld3DUI?.mount === 'function') {
+  journey = window.LivingJourney.create({navigate: navigateWorld, onChange: snapshot => world3d?.updateQuest(snapshot)});
+  world3d = window.LivingWorld3DUI.mount($('world3d-root'), {
+    navigate: visitCase,
+    onAnswer: (challengeId, choiceId, hintUsed) => {
+      if (!state.identity || !state.profile) return false;
+      return journey.attempt(challengeId, choiceId, hintUsed);
+    },
+    onExit: () => navigateWorld('signin')
+  });
+  world3d.updateQuest(journey.snapshot());
+}
+if (typeof window.LivingReadingWorld?.mount === 'function') {
+  readingWorld = window.LivingReadingWorld.mount($('reading-world-root'), {
+    navigate: destination => journey ? visitCase(destination) : navigateWorld(destination)
+  });
 }
 (async function initialize() {
   const stamp = snapshot();
