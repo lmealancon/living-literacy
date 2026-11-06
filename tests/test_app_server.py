@@ -88,6 +88,57 @@ class AppServerTests(unittest.TestCase):
         self.assertFalse(data['canonical_skill_definitions_present'])
         self.assertEqual(len(data['domains']), 12)
 
+    def test_companion_demo_is_authenticated_and_disabled_by_default(self):
+        self.assertEqual(self.call('GET', '/api/companion/status')[0], 403)
+        self.login()
+        self.assertEqual(self.call('GET', '/api/companion/status')[1], {'enabled': False})
+        self.assertEqual(self.call('POST', '/api/companion/reply', {'action': 'hello'})[0], 403)
+
+        class FakeProvider:
+            calls = []
+            def reply(self, action):
+                self.calls.append(action)
+                return {'text': 'Hello! It is nice to meet you.', 'mode': 'local_ai_synthetic'}
+        provider = FakeProvider()
+        self.app.synthetic_companion = provider
+        self.app.synthetic_conversation = object()
+        self.assertEqual(self.call('GET', '/api/companion/status')[1], {'enabled': True})
+        self.assertEqual(self.call('POST', '/api/companion/reply', {'action': 'hello'}, csrf=False)[0], 403)
+        self.assertEqual(self.call('POST', '/api/companion/reply', {'action': 'hello'}, origin=False)[0], 403)
+        self.assertEqual(self.call('POST', '/api/companion/reply', {'action': 'hello', 'student': 'synthetic-secret'})[0], 400)
+        self.assertEqual(provider.calls, [])
+        status, result = self.call('POST', '/api/companion/reply', {'action': 'hello'})
+        self.assertEqual((status, result['mode'], provider.calls), (200, 'local_ai_synthetic', ['hello']))
+        self.assertEqual(self.call('POST', '/api/logout', {})[0], 200)
+        self.assertEqual(self.call('POST', '/api/companion/reply', {'action': 'hello'})[0], 403)
+
+    def test_companion_model_cannot_be_enabled_for_private_staging(self):
+        with self.assertRaises(ValueError):
+            App(Path(self.tmp.name) / 'other.sqlite', staging_origin='https://example.test',
+                proxy_secret='a' * 32, synthetic_companion_model='local-model')
+
+    def test_synthetic_conversation_route_authentication_and_payload(self):
+        payload = {'message': 'What is a story?', 'history': []}
+        self.assertEqual(self.call('POST', '/api/companion/conversation', payload)[0], 403)
+        self.login()
+        self.assertEqual(self.call('POST', '/api/companion/conversation', payload)[0], 403)
+
+        class FakeConversation:
+            calls = []
+            def reply(self, message, history):
+                self.calls.append((message, history))
+                return {'text': 'A fictional reply.', 'mode': 'local_ai_unreviewed'}
+        provider = FakeConversation()
+        self.app.synthetic_conversation = provider
+        self.assertEqual(self.call('POST', '/api/companion/conversation', payload, csrf=False)[0], 403)
+        self.assertEqual(self.call('POST', '/api/companion/conversation', payload, origin=False)[0], 403)
+        self.assertEqual(self.call('POST', '/api/companion/conversation', dict(payload, student_id='synthetic-a'))[0], 400)
+        self.assertEqual(provider.calls, [])
+        status, result = self.call('POST', '/api/companion/conversation', payload)
+        self.assertEqual((status, result['mode'], provider.calls), (200, 'local_ai_unreviewed', [('What is a story?', [])]))
+        self.assertEqual(self.call('POST', '/api/logout', {})[0], 200)
+        self.assertEqual(self.call('POST', '/api/companion/conversation', payload)[0], 403)
+
     def test_synthetic_assessment_api_requires_separate_consent_and_withdrawal(self):
         forms_path = '/api/v1/students/synthetic-student-1/assessment-forms'
         history_path = '/api/v1/students/synthetic-student-1/assessment-history'

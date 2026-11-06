@@ -47,6 +47,7 @@ Done when the framework and contracts are tested and source/review records are c
 - Formalize and version curriculum, assessment and narration interfaces, package manifests and compatibility/conformance tests. Apply server authorization, permissions, input validation, resource limits, provenance and withdrawal checks to every adapter. Support a no-provider/offline fallback where feasible.
 - Add operator-controlled deployment configuration, metrics without learner secrets, audited administration, recovery/restore drills, updates and rollback. Document accessibility and data portability. No mandatory hosted subscription, analytics service or external provider for CE core.
 - Enable narration only after reviewed scripts, licensed audio, accessible transcripts/captions, tested withdrawal, and atomic assistance logging are available.
+- Build the owner's requested sitewide AI reading companion as a self-hostable, optional component, with accessible text alternatives, explicit voice controls and reviewed, age-appropriate behavior. Connect lesson-specific help only after it can record assistance transactionally, respect content withdrawal and protect learner data. The current local fixed-prompt model experiment does not implement conversation or listening.
 
 Done when independent self-hosted installation and upgrade, extension compatibility, incident handling and data export/recovery have been tested and documented.
 

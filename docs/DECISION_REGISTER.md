@@ -15,7 +15,7 @@
 | D-011 | Retention and deletion schedule | unresolved | real child processing |
 | D-012 | Human reviewer assignments | unresolved | content production release |
 | D-013 | School procurement and DPA | deferred | school deployment |
-| D-014 | Live child AI tutor and ASR | deferred | live child AI / speech scoring |
+| D-014 | Live child AI tutor and ASR | owner requested a sitewide talking companion; real-child delivery remains unimplemented pending the controls and reviews in the release gates | live child AI / speech scoring |
 | D-015 | Exact API schemas and DB migrations | engineering_pending | feature implementation |
 
 | D-016 | Skill source inventory and identifier provenance | unresolved | canonical skill import |

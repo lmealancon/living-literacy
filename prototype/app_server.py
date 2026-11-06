@@ -28,6 +28,8 @@ from prototype.synthetic_narration_store import SyntheticNarrationStore
 from prototype.curriculum_overview import candidate_domains
 from prototype.assessment_service import SyntheticAssessmentService
 from prototype.assessment_workflow import SyntheticAssessmentWorkflow
+from prototype.companion_ai import LocalAICompanion
+from prototype.companion_conversation import LocalSyntheticConversation
 
 WEB = Path(__file__).parent / 'web'
 MAX_REQUEST = 4096
@@ -77,12 +79,18 @@ def bootstrap(filename, identity, password):
 
 class App:
     def __init__(self, filename, *, staging_origin=None, proxy_secret=None,
-                 synthetic_audio_enabled=False):
+                 synthetic_audio_enabled=False, synthetic_companion_model=None):
         self.staging_origin = staging_origin
         self.proxy_secret = proxy_secret
         self.staging_host = validate_staging_config(staging_origin, proxy_secret) if staging_origin else None
         if not staging_origin and proxy_secret is not None:
             raise ValueError('Gateway secret requires private staging mode')
+        if staging_origin and synthetic_companion_model is not None:
+            raise ValueError('Synthetic model experiments are not available in staging')
+        self.synthetic_companion = (LocalAICompanion(enabled=True, model=synthetic_companion_model)
+                                    if synthetic_companion_model is not None else None)
+        self.synthetic_conversation = (LocalSyntheticConversation(enabled=True, model=synthetic_companion_model)
+                                       if synthetic_companion_model is not None else None)
         self.store = SyntheticSQLiteStore(filename)
         self.auth = SyntheticParentAuth(self.store)
         self.family_insights = SyntheticFamilyInsights(self.store)
@@ -190,6 +198,8 @@ def make_handler(app):
                 identity = app.identity(token)
                 if path == '/api/me':
                     return self.send_body(200, {'identity': identity, 'csrf': app.csrf(token)})
+                if path == '/api/companion/status':
+                    return self.send_body(200, {'enabled': app.synthetic_companion is not None and app.synthetic_conversation is not None})
                 if path == '/api/profiles':
                     return self.send_body(200, {'profiles': app.profiles(token)})
                 if path == '/api/lessons':
@@ -248,6 +258,18 @@ def make_handler(app):
                     app.auth.logout(token)
                     secure = '; Secure' if app.staging_origin else ''
                     return self.send_body(200, {'ok': True}, cookie='ll_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + secure)
+                if path == '/api/companion/reply':
+                    if set(data) != {'action'} or not isinstance(data['action'], str):
+                        raise ValueError('Invalid companion request')
+                    if app.synthetic_companion is None:
+                        raise PolicyError('COMPANION_UNAVAILABLE')
+                    return self.send_body(200, app.synthetic_companion.reply(data['action']))
+                if path == '/api/companion/conversation':
+                    if set(data) != {'message', 'history'}:
+                        raise ValueError('Invalid conversation request')
+                    if app.synthetic_conversation is None:
+                        raise PolicyError('COMPANION_UNAVAILABLE')
+                    return self.send_body(200, app.synthetic_conversation.reply(data['message'], data['history']))
                 if path == '/api/profiles':
                     profile = app.store.create_synthetic_profile(token, data['anchor_id'], data['student_id'])
                     return self.send_body(201, {'profile': profile})
@@ -329,9 +351,12 @@ def main():
     parser.add_argument('--container-demo', action='store_true',
                         help='Allow container-network access; only use with a loopback-published local demo')
     parser.add_argument('--private-staging-origin', help='Exact HTTPS origin for staging behind a same-host private gateway')
+    parser.add_argument('--synthetic-ai-model', help='Opt in to a local-only, fixed-prompt synthetic AI experiment with this locally installed model')
     args = parser.parse_args()
     if args.private_staging_origin and (args.container_demo or args.init):
         parser.error('Private staging cannot be combined with --container-demo or --init')
+    if args.synthetic_ai_model and (args.container_demo or args.private_staging_origin or args.init):
+        parser.error('The synthetic AI experiment is available only in localhost demo mode')
     proxy_secret = os.environ.get('LIVING_LITERACY_STAGING_PROXY_SECRET') if args.private_staging_origin else None
     if args.private_staging_origin:
         try:
@@ -353,7 +378,7 @@ def main():
     bind_host = '0.0.0.0' if args.container_demo else '127.0.0.1'
     if args.container_demo:
         print('WARNING: container-network listener; restrict port publishing to localhost. Synthetic data only.', flush=True)
-    app = App(args.db, staging_origin=args.private_staging_origin, proxy_secret=proxy_secret) if args.private_staging_origin else App(args.db)
+    app = App(args.db, staging_origin=args.private_staging_origin, proxy_secret=proxy_secret) if args.private_staging_origin else App(args.db, synthetic_companion_model=args.synthetic_ai_model)
     server = ThreadingHTTPServer((bind_host, args.port), make_handler(app))
     if args.private_staging_origin:
         print('WARNING: private HTTPS staging requires an authenticated same-host gateway; synthetic data only.', flush=True)

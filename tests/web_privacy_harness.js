@@ -270,4 +270,187 @@ async function testFixedVoiceDemo() {
   assert.equal(noVoice.document.getElementById('voice-demo-text').textContent, 'Hello! It is nice to meet you.');
   assert(noVoice.document.getElementById('voice-demo-status').textContent.includes('unavailable'));
 }
-(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
+async function testCompanionAcrossViewsAndOptionalAI() {
+  const pendingReply = deferred();
+  const calls = [];
+  const h = harness((url, options) => {
+    calls.push({url, options});
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/logout') return Promise.resolve(response({ok:true}));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/reply') return pendingReply.promise;
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-private'; state.csrf='csrf'; show('login-view')", h.context);
+  assert(h.document.getElementById('companion-greeting').textContent.includes('Sign in'));
+  assert.equal(h.document.getElementById('companion-login-links').hidden, false);
+  vm.runInContext("show('dashboard')", h.context);
+  assert(h.document.getElementById('companion-greeting').textContent.includes('Welcome back'));
+  assert.equal(h.document.getElementById('companion-dashboard-links').hidden, false);
+  await vm.runInContext('loadCompanionAIStatus()', h.context);
+  assert.equal(h.document.getElementById('companion-ai-demo').hidden, false);
+  const reply = h.document.getElementById('companion-ai-hello').events.click();
+  const post = calls.find(call => call.url === '/api/companion/reply');
+  assert.deepEqual(JSON.parse(post.options.body), {action:'hello'}, 'no profile or lesson data is sent');
+  assert.equal(post.options.headers['X-CSRF-Token'], 'csrf');
+  await h.document.getElementById('logout').events.click();
+  pendingReply.resolve(response({text:'A late AI greeting', mode:'experimental'}));
+  await reply;
+  assert.equal(h.document.getElementById('companion-ai-result').textContent, '', 'late response must not survive sign out');
+  assert.equal(h.document.getElementById('companion-ai-demo').hidden, true);
+
+  const unavailable = harness(url => url === '/api/me' ? Promise.resolve(response({}, 403)) : Promise.resolve(response({enabled:false})));
+  await tick();
+  await vm.runInContext('loadCompanionAIStatus()', unavailable.context);
+  assert.equal(unavailable.document.getElementById('companion-ai-demo').hidden, true, 'AI option is hidden by default');
+
+  const successful = harness(url => {
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/reply') return Promise.resolve(response({text:'<b>Hello!</b>', mode:'experimental'}));
+    throw new Error('Unexpected request');
+  });
+  await tick();
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-learner'; state.csrf='csrf'", successful.context);
+  await vm.runInContext('loadCompanionAIStatus()', successful.context);
+  await successful.document.getElementById('companion-ai-hello').events.click();
+  assert.equal(successful.document.getElementById('companion-ai-result').textContent, '<b>Hello!</b>', 'reply is displayed as plain text');
+}
+async function testSyntheticConversation() {
+  const posts = [], spoken = [];
+  const h = harness((url, options) => {
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/conversation') {
+      posts.push({body:JSON.parse(options.body), csrf:options.headers['X-CSRF-Token']});
+      return Promise.resolve(response({text: posts.length === 1 ? '<b>Fictional reply</b>' : 'Another fictional answer', mode:'local_ai_unreviewed'}));
+    }
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  h.window.speechSynthesis = {speak: utterance => spoken.push(utterance), cancel() {}};
+  h.window.SpeechSynthesisUtterance = function(text) { this.text = text; };
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-private'; state.csrf='csrf'; show('dashboard')", h.context);
+  await vm.runInContext('loadCompanionAIStatus()', h.context);
+  assert.equal(h.document.getElementById('companion-conversation').hidden, false, 'conversation must require enabled local model');
+  h.document.getElementById('conversation-mic').events.click();
+  assert(h.document.getElementById('conversation-status').textContent.includes('unavailable'), 'unsupported microphones must keep a usable text fallback');
+  const input = h.document.getElementById('conversation-input');
+  input.value = 'What does this fictional word mean?';
+  await h.document.getElementById('conversation-form').events.submit({preventDefault(){}});
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body, {message:'What does this fictional word mean?', history:[]});
+  assert.equal(posts[0].csrf, 'csrf');
+  assert(!JSON.stringify(posts[0].body).includes('synthetic-private'), 'no profile identifier may be sent');
+  assert(h.document.getElementById('conversation-messages').textContent.includes('<b>Fictional reply</b>'), 'reply remains visible as text');
+  assert(!h.document.getElementById('conversation-messages').descendants().some(n => n.tagName === 'b'), 'model output must not become markup');
+  assert.equal(spoken.length, 0, 'model responses must not be spoken automatically');
+  h.document.getElementById('conversation-hear').events.click();
+  assert.equal(spoken.length, 1, 'speech must require a deliberate click');
+  assert.equal(spoken[0].text, '<b>Fictional reply</b>');
+  input.value = 'Can you say more?';
+  await h.document.getElementById('conversation-form').events.submit({preventDefault(){}});
+  assert.equal(posts.length, 2);
+  assert.equal(posts[1].body.message, 'Can you say more?');
+  assert.deepEqual(posts[1].body.history, [{role:'user',content:'What does this fictional word mean?'}, {role:'assistant',content:'<b>Fictional reply</b>'}]);
+  for (let index = 0; index < 4; index++) {
+    input.value = 'Another fictional question ' + index;
+    await h.document.getElementById('conversation-form').events.submit({preventDefault(){}});
+  }
+  assert(posts.every(post => post.body.history.length <= 6), 'conversation history must remain bounded');
+  vm.runInContext("show('lesson-view')", h.context);
+  assert.equal(input.value, '', 'navigation clears conversation input');
+  assert.equal(h.document.getElementById('conversation-messages').textContent, '', 'navigation clears conversation transcript');
+}
+
+async function testConversationMicrophoneAndStaleReply() {
+  const pending = deferred(), requests = [];
+  let recognition, starts = 0, stops = 0;
+  const h = harness((url, options) => {
+    requests.push(url);
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/logout') return Promise.resolve(response({ok:true}));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/conversation') return pending.promise;
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  h.window.SpeechRecognition = function() {
+    recognition = this;
+    this.start = () => { starts++; };
+    this.stop = () => { stops++; };
+    this.abort = () => { stops++; };
+  };
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-a'; state.csrf='csrf'; show('dashboard')", h.context);
+  await vm.runInContext('loadCompanionAIStatus()', h.context);
+  assert.equal(starts, 0, 'microphone must never start automatically');
+  h.document.getElementById('conversation-mic').events.click();
+  assert.equal(starts, 1, 'microphone starts only after explicit click');
+  const activeRecognition = recognition;
+  const input = h.document.getElementById('conversation-input');
+  activeRecognition.onresult({resultIndex:0,results:[[{transcript:'Fictional speech'}]]});
+  assert.equal(input.value, 'Fictional speech', 'transcription should populate the editable text fallback');
+  assert(!requests.includes('/api/companion/conversation'), 'transcription must not auto-submit');
+  const beforeStop = stops;
+  h.document.getElementById('conversation-stop-mic').events.click();
+  assert(stops > beforeStop, 'stop must abort active recognition');
+  activeRecognition.onresult({resultIndex:0,results:[[{transcript:'late transcription'}]]});
+  assert.equal(input.value, 'Fictional speech', 'late results from stopped recognition must be ignored');
+  h.document.getElementById('conversation-mic').events.click();
+  assert.equal(starts, 2, 'microphone may be started again by an explicit click');
+  const recognitionAtLogout = recognition;
+  const beforeLogout = stops;
+  await h.document.getElementById('logout').events.click();
+  assert(stops > beforeLogout, 'logout must stop an active microphone');
+  assert.equal(h.document.getElementById('conversation-messages').textContent, '', 'late model output must not survive sign-out');
+  assert.equal(input.value, '', 'sign-out clears typed text');
+  assert.equal(h.document.getElementById('companion-conversation').hidden, true);
+  if (recognitionAtLogout.onresult) {
+    recognitionAtLogout.onresult({resultIndex:0,results:[[{transcript:'late transcription'}]]});
+    assert.equal(input.value, '', 'late microphone results must not survive sign-out');
+  }
+  const second = harness((url) => {
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/logout') return Promise.resolve(response({ok:true}));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/conversation') return pending.promise;
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-a'; state.csrf='csrf'; show('dashboard')", second.context);
+  await vm.runInContext('loadCompanionAIStatus()', second.context);
+  second.document.getElementById('conversation-input').value = 'Fictional question';
+  const answer = second.document.getElementById('conversation-form').events.submit({preventDefault(){}});
+  await second.document.getElementById('logout').events.click();
+  pending.resolve(response({text:'Late fictional reply',mode:'local_ai_unreviewed'}));
+  await answer;
+  assert.equal(second.document.getElementById('conversation-messages').textContent, '', 'late model output must not survive sign-out');
+}
+
+async function testEscapedConversationPayloadIsBounded() {
+  const sizes = [], lengths = [];
+  const h = harness((url, options) => {
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/companion/status') return Promise.resolve(response({enabled:true}));
+    if (url === '/api/companion/conversation') {
+      sizes.push(Buffer.byteLength(options.body, 'utf8'));
+      lengths.push(JSON.parse(options.body).history.length);
+      return Promise.resolve(response({text:'\\'.repeat(390), mode:'local_ai_unreviewed'}));
+    }
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-a'; state.csrf='csrf'; show('dashboard')", h.context);
+  await vm.runInContext('loadCompanionAIStatus()', h.context);
+  const input = h.document.getElementById('conversation-input');
+  for (let index = 0; index < 6; index++) {
+    input.value = ('\\"').repeat(195);
+    await h.document.getElementById('conversation-form').events.submit({preventDefault(){}});
+  }
+  assert.equal(sizes.length, 6);
+  assert(sizes.every(size => size <= 4000), 'serialized UTF-8 JSON must fit the request limit even with escaped characters');
+  assert(lengths.some((length, index) => index >= 3 && length < 6), 'oldest pairs should be dropped when escaped JSON would be too large');
+}
+
+(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); await testCompanionAcrossViewsAndOptionalAI(); await testSyntheticConversation(); await testConversationMicrophoneAndStaleReply(); await testEscapedConversationPayloadIsBounded(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });

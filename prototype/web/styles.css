@@ -20,6 +20,13 @@ main {max-width:1150px;margin:auto;padding:2.4rem 1.25rem 5rem}
 .hero-copy {position:relative;z-index:1}
 .hero-scene {max-width:410px;justify-self:center;width:100%}
 .hero-scene svg {display:block;width:100%;height:auto}
+.companion-welcome {max-width:260px;padding:1rem;border-radius:50%;background:#e3f0e0}
+.companion-welcome .guide-body {transform-origin:50% 68%;animation:guide-sway 4s ease-in-out infinite}
+.companion-welcome-message {margin-top:1.25rem;padding:1rem 1.15rem;background:#edf6ea;border:1px solid #c7dfc9;border-radius:18px;color:#214b3f}
+.companion-welcome-message .eyebrow {margin:0;color:#426b42}.companion-welcome-message p:not(.eyebrow) {margin:.35rem 0 .7rem;font-weight:650}
+.companion-links {display:flex;flex-wrap:wrap;gap:.55rem}.companion-links a {display:inline-flex;align-items:center;min-height:44px;color:#21594e;font-weight:750;text-decoration:underline;text-underline-offset:.15em}
+.companion-lesson-message {margin:.5rem 0 0;color:#365e4f;font-size:.9rem;font-weight:650}.companion-ai-demo {margin-top:1rem;border-top:1px solid var(--line);padding-top:1rem}.companion-ai-demo h4 {margin:0}
+.companion-conversation {margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)}.companion-conversation h4 {margin:0}.conversation-messages {display:grid;gap:.6rem;max-height:20rem;overflow:auto}.conversation-message {padding:.65rem .85rem;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere;background:#edf5ed}.conversation-message strong {display:block;font-size:.8rem;color:#315d44}.conversation-message p {margin:.25rem 0 0}
 .scene-book {transform-origin:50% 55%;animation:book-float 5s ease-in-out infinite}
 .hero-tag {display:inline-flex;align-items:center;gap:.5rem;padding:.55rem .9rem;border-radius:999px;background:#f8eac9;color:#584011;font-size:.84rem;font-weight:700}
 .hero-tag span {color:#906100}

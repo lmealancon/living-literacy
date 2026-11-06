@@ -2,6 +2,7 @@
 // Synthetic-data prototype. All access and content checks are enforced by the server.
 const $ = id => document.getElementById(id);
 const state = { csrf: null, identity: null, profiles: [], lessons: [], profile: null, session: null, history: [], epoch: 0 };
+const conversation = {history: [], version: 0, busy: false, lastReply: '', recognition: null};
 // Motion is optional; never override a device-level reduced-motion preference.
 const motionButton = $('motion-toggle');
 const motionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -54,12 +55,17 @@ function clearLessonData() {
 }
 function clearProfileData() {
   state.history = []; clearLessonData();
+  clearConversation();
+  $('companion-ai-result').textContent = '';
   for (const id of ['history', 'interests', 'activity-summary']) $(id).replaceChildren();
   for (const id of ['stat-inprogress', 'stat-completed']) $(id).textContent = '—';
 }
 function clearProtectedData() {
   clearProfileData();
   state.profiles = []; state.lessons = []; state.profile = null;
+  $('companion-ai-demo').hidden = true;
+  $('companion-conversation').hidden = true;
+  $('companion-ai-result').textContent = '';
   for (const id of ['profiles', 'lesson-list', 'curriculum-domains']) $(id).replaceChildren();
   $('stat-profiles').textContent = '—';
   $('new-profile').value = ''; $('history-filter').value = 'all';
@@ -131,8 +137,13 @@ $('voice-demo-stop').addEventListener('click', () => {
   $('voice-demo-status').textContent = 'Audio stopped.';
 });
 function show(view) {
-  if (view !== 'dashboard') stopDemoSpeech();
+  if (view !== 'dashboard') { stopDemoSpeech(); clearConversation(); }
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
+  $('companion-greeting').textContent = view === 'dashboard'
+    ? 'Welcome back! Choose a fictional profile and an activity to explore together.'
+    : 'Hello! Welcome to our reading adventure. Sign in to explore the fictional demo.';
+  $('companion-login-links').hidden = view !== 'login-view';
+  $('companion-dashboard-links').hidden = view !== 'dashboard';
   $('logout').hidden = !state.identity;
   document.body?.setAttribute('data-view', view);
 }
@@ -159,6 +170,144 @@ async function request(path, data) {
   }
   return result;
 }
+// Optional adult-only model experiment. No lesson or learner data is sent.
+async function loadCompanionAIStatus() {
+  $('companion-ai-demo').hidden = true;
+  $('companion-conversation').hidden = true;
+  $('companion-ai-result').textContent = '';
+  const stamp = snapshot();
+  try {
+    const data = await request('/api/companion/status');
+    if (current(stamp) && data.enabled === true) {
+      $('companion-ai-demo').hidden = false;
+      $('companion-conversation').hidden = false;
+    }
+  } catch (_) { /* The optional provider is unavailable; the rest of the site still works. */ }
+}
+$('companion-ai-hello').addEventListener('click', async () => {
+  const stamp = snapshot();
+  $('companion-ai-result').textContent = 'Preparing a reply…';
+  try {
+    const data = await request('/api/companion/reply', {action: 'hello'});
+    if (!current(stamp)) return;
+    if (typeof data.text !== 'string' || !data.text.trim()) throw new Error('Unavailable');
+    $('companion-ai-result').textContent = data.text;
+  } catch (_) {
+    if (current(stamp)) $('companion-ai-result').textContent = 'The experimental AI reply is unavailable right now.';
+  }
+});
+
+// Adult fictional-data conversation only. No lesson, profile or identity is
+// included in the request. The browser may use third-party speech services.
+function stopConversationMicrophone() {
+  const active = conversation.recognition;
+  conversation.recognition = null;
+  if (active) { try { active.abort(); } catch (_) { /* Already stopped. */ } }
+}
+function clearConversation() {
+  conversation.version++;
+  conversation.history = []; conversation.busy = false; conversation.lastReply = '';
+  stopConversationMicrophone();
+  stopDemoSpeech();
+  $('conversation-input').value = '';
+  $('conversation-messages').replaceChildren();
+  $('conversation-status').textContent = '';
+  $('conversation-send').disabled = false;
+  $('conversation-hear').disabled = true;
+}
+function conversationBytes(text) {
+  try { return encodeURIComponent(text).replace(/%[0-9A-F]{2}|./g, 'x').length; }
+  catch (_) { return Infinity; }
+}
+function appendConversationMessage(role, text) {
+  const entry = el('div', undefined, 'conversation-message');
+  entry.append(el('strong', role === 'user' ? 'You' : 'Companion'), el('p', text));
+  $('conversation-messages').append(entry);
+}
+$('conversation-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if ($('companion-conversation').hidden || conversation.busy) return;
+  const text = $('conversation-input').value.trim();
+  if (!text || Array.from(text).length > 400 || conversationBytes(text) > 3000) {
+    $('conversation-status').textContent = 'Enter a fictional question of up to 400 characters.';
+    return;
+  }
+  stopConversationMicrophone();
+  stopDemoSpeech();
+  let history = conversation.history.slice(-6);
+  while (history.length && (history.reduce((n, item) => n + conversationBytes(item.content), conversationBytes(text)) > 3000
+      || conversationBytes(JSON.stringify({message: text, history})) > 4000)) history = history.slice(2);
+  const stamp = snapshot(); const version = conversation.version;
+  conversation.busy = true; $('conversation-send').disabled = true;
+  $('conversation-status').textContent = 'Preparing a reply…';
+  try {
+    const data = await request('/api/companion/conversation', {message: text, history});
+    if (!current(stamp) || version !== conversation.version) return;
+    if (data.mode !== 'local_ai_unreviewed' || typeof data.text !== 'string' || !data.text.trim() || conversationBytes(data.text) > 3000) throw new Error('Unavailable');
+    appendConversationMessage('user', text);
+    appendConversationMessage('assistant', data.text);
+    // Retain only complete, bounded pairs for the next request.
+    conversation.history = Array.from(data.text).length <= 1200 ? [...history, {role:'user', content:text}, {role:'assistant', content:data.text}].slice(-6) : [];
+    conversation.lastReply = data.text;
+    $('conversation-input').value = '';
+    $('conversation-hear').disabled = false;
+    $('conversation-status').textContent = 'Reply ready. AI answers are unreviewed.';
+  } catch (_) {
+    if (current(stamp) && version === conversation.version) $('conversation-status').textContent = 'The AI conversation is unavailable. Please try again.';
+  } finally {
+    if (current(stamp) && version === conversation.version) { conversation.busy = false; $('conversation-send').disabled = false; }
+  }
+});
+$('conversation-mic').addEventListener('click', () => {
+  if ($('companion-conversation').hidden || conversation.busy) return;
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (typeof Recognition !== 'function') { $('conversation-status').textContent = 'Microphone recognition is unavailable. Type your question instead.'; return; }
+  stopConversationMicrophone(); stopDemoSpeech();
+  const version = conversation.version; const stamp = snapshot();
+  try {
+    const recognition = new Recognition();
+    conversation.recognition = recognition;
+    recognition.lang = 'en-US'; recognition.continuous = false; recognition.interimResults = false;
+    recognition.onresult = event => {
+      if (!current(stamp) || version !== conversation.version || conversation.recognition !== recognition) return;
+      const transcript = event.results?.[0]?.[0]?.transcript;
+      if (typeof transcript !== 'string') return;
+      $('conversation-input').value = Array.from(transcript).slice(0, 400).join('');
+      $('conversation-status').textContent = 'Review the transcription before sending.';
+    };
+    recognition.onerror = () => {
+      if (current(stamp) && version === conversation.version && conversation.recognition === recognition)
+        $('conversation-status').textContent = 'Microphone recognition failed. You can type instead.';
+    };
+    recognition.onend = () => { if (conversation.recognition === recognition) conversation.recognition = null; };
+    recognition.start();
+    $('conversation-status').textContent = 'Listening. Speak a fictional question.';
+  } catch (_) {
+    conversation.recognition = null;
+    $('conversation-status').textContent = 'Microphone recognition is unavailable. Type your question instead.';
+  }
+});
+$('conversation-stop-mic').addEventListener('click', () => {
+  stopConversationMicrophone(); $('conversation-status').textContent = 'Microphone stopped.';
+});
+$('conversation-hear').addEventListener('click', () => {
+  if ($('companion-conversation').hidden || !conversation.lastReply) return;
+  stopConversationMicrophone(); stopDemoSpeech();
+  if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') {
+    $('conversation-status').textContent = 'Voice is unavailable. The reply remains visible.'; return;
+  }
+  const version = conversation.version; const stamp = snapshot(); const speechStamp = demoSpeechGeneration;
+  try {
+    const utterance = new window.SpeechSynthesisUtterance(conversation.lastReply);
+    utterance.lang = 'en-US';
+    utterance.onend = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) $('conversation-status').textContent = 'Reply finished.'; };
+    utterance.onerror = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; };
+    window.speechSynthesis.speak(utterance);
+    $('conversation-status').textContent = 'Playing the unreviewed reply.';
+  } catch (_) { $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; }
+});
+$('conversation-stop-audio').addEventListener('click', () => { stopDemoSpeech(); $('conversation-status').textContent = 'Audio stopped.'; });
+$('conversation-clear').addEventListener('click', clearConversation);
 async function loadDashboard() {
   const stamp = snapshot();
   clearProfileData();
@@ -171,7 +320,7 @@ async function loadDashboard() {
   $('stat-profiles').textContent = String(state.profiles.length);
   renderProfiles();
   renderLessons();
-  await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains()]);
+  await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains(), loadCompanionAIStatus()]);
 }
 function renderProfiles() {
   const area = $('profiles');
