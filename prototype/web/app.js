@@ -3,6 +3,7 @@
 const $ = id => document.getElementById(id);
 const state = { csrf: null, identity: null, profiles: [], lessons: [], profile: null, session: null, history: [], epoch: 0 };
 const conversation = {history: [], version: 0, busy: false, lastReply: '', recognition: null};
+const guideTimers = new Map();
 // Motion is optional; never override a device-level reduced-motion preference.
 const motionButton = $('motion-toggle');
 const motionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -15,6 +16,7 @@ function applyMotionPreference() {
   motionButton.setAttribute('aria-pressed', String(reduced));
   motionButton.disabled = deviceReducesMotion;
   motionButton.textContent = deviceReducesMotion ? 'Motion reduced by device' : 'Reduce motion';
+  if (reduced) for (const id of ['hero-animated-guide', 'lesson-guide', 'voice-demo-guide']) setGuideMood(id, 'idle');
 }
 motionButton.addEventListener('click', () => {
   if (deviceReducesMotion) return;
@@ -46,9 +48,33 @@ applyVisualPreference();
 const ongoing = session => ['created', 'active', 'paused'].includes(session.status);
 const snapshot = () => ({epoch: state.epoch, identity: state.identity, profile: state.profile});
 const current = stamp => stamp.epoch === state.epoch && stamp.identity === state.identity && stamp.profile === state.profile;
+// Reactions are decorative and do not change lesson state or imply correctness.
+// Clearing a pending reset lets repeated taps replay the animation reliably.
+function setGuideMood(id, mood, duration = 1900) {
+  const guide = $(id);
+  if (!guide || !['idle', 'react', 'celebrate', 'talking'].includes(mood)) return;
+  if (guideTimers.has(id)) {
+    if (typeof window.clearTimeout === 'function') window.clearTimeout(guideTimers.get(id));
+    guideTimers.delete(id);
+  }
+  if (deviceReducesMotion || userReducesMotion) mood = 'idle';
+  if (mood !== 'idle') {
+    guide.setAttribute('data-mood', 'idle');
+    void guide.offsetWidth; // Restart the CSS animation for repeated interactions.
+  }
+  guide.setAttribute('data-mood', mood);
+  if (mood !== 'idle' && duration > 0 && typeof window.setTimeout === 'function') {
+    const timer = window.setTimeout(() => {
+      if (guideTimers.get(id) !== timer) return;
+      guideTimers.delete(id);
+      guide.setAttribute('data-mood', 'idle');
+    }, duration);
+    guideTimers.set(id, timer);
+  }
+}
 function clearLessonData() {
   state.session = null;
-  $('lesson-guide').setAttribute('data-mood', 'idle');
+  setGuideMood('lesson-guide', 'idle');
   for (const id of ['stage-pathway', 'response-area', 'lesson-actions']) $(id).replaceChildren();
   for (const id of ['stage-title', 'stage-instruction', 'stage-word', 'coach-note', 'lesson-counter', 'session-status']) $(id).textContent = '';
   $('progress-fill').style.width = '0%'; $('progress').setAttribute('aria-valuenow', '1');
@@ -97,7 +123,8 @@ let demoSpeechGeneration = 0;
 function stopDemoSpeech() {
   demoSpeechGeneration++;
   try { window.speechSynthesis?.cancel(); } catch (_) { /* A voice service may be unavailable. */ }
-  $('voice-demo-guide').setAttribute('data-mood', 'idle');
+  setGuideMood('voice-demo-guide', 'idle');
+  setGuideMood('hero-animated-guide', 'idle');
 }
 function playDemoSpeech(choice) {
   if (!Object.hasOwn(demoPhrases, choice)) return;
@@ -114,19 +141,23 @@ function playDemoSpeech(choice) {
     utterance.lang = 'en-US';
     utterance.onend = () => {
       if (stamp !== demoSpeechGeneration) return;
-      $('voice-demo-guide').setAttribute('data-mood', 'idle');
+      setGuideMood('voice-demo-guide', 'idle');
+      setGuideMood('hero-animated-guide', 'idle');
       $('voice-demo-status').textContent = 'Sample finished.';
     };
     utterance.onerror = () => {
       if (stamp !== demoSpeechGeneration) return;
-      $('voice-demo-guide').setAttribute('data-mood', 'idle');
+      setGuideMood('voice-demo-guide', 'idle');
+      setGuideMood('hero-animated-guide', 'idle');
       $('voice-demo-status').textContent = 'Voice could not be played. The words are shown above.';
     };
-    $('voice-demo-guide').setAttribute('data-mood', 'react');
+    setGuideMood('voice-demo-guide', 'talking', 0);
+    setGuideMood('hero-animated-guide', 'talking', 0);
     $('voice-demo-status').textContent = 'Playing the sample phrase.';
     window.speechSynthesis.speak(utterance);
   } catch (_) {
-    $('voice-demo-guide').setAttribute('data-mood', 'idle');
+    setGuideMood('voice-demo-guide', 'idle');
+    setGuideMood('hero-animated-guide', 'idle');
     $('voice-demo-status').textContent = 'Voice could not be played. The words are shown above.';
   }
 }
@@ -136,8 +167,13 @@ $('voice-demo-stop').addEventListener('click', () => {
   stopDemoSpeech();
   $('voice-demo-status').textContent = 'Audio stopped.';
 });
+$('hero-greet')?.addEventListener('click', () => {
+  setGuideMood('hero-animated-guide', 'react');
+  $('companion-greeting').textContent = 'Hello! I am happy you are here.';
+});
 function show(view) {
   if (view !== 'dashboard') { stopDemoSpeech(); clearConversation(); }
+  setGuideMood('hero-animated-guide', view === 'dashboard' ? 'react' : 'idle');
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
   $('companion-greeting').textContent = view === 'dashboard'
     ? 'Welcome back! Choose a fictional profile and an activity to explore together.'
@@ -300,11 +336,12 @@ $('conversation-hear').addEventListener('click', () => {
   try {
     const utterance = new window.SpeechSynthesisUtterance(conversation.lastReply);
     utterance.lang = 'en-US';
-    utterance.onend = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) $('conversation-status').textContent = 'Reply finished.'; };
-    utterance.onerror = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; };
+    utterance.onend = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) { setGuideMood('hero-animated-guide', 'idle'); $('conversation-status').textContent = 'Reply finished.'; } };
+    utterance.onerror = () => { if (current(stamp) && version === conversation.version && speechStamp === demoSpeechGeneration) { setGuideMood('hero-animated-guide', 'idle'); $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; } };
+    setGuideMood('hero-animated-guide', 'talking', 0);
     window.speechSynthesis.speak(utterance);
     $('conversation-status').textContent = 'Playing the unreviewed reply.';
-  } catch (_) { $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; }
+  } catch (_) { setGuideMood('hero-animated-guide', 'idle'); $('conversation-status').textContent = 'Voice playback failed. The reply remains visible.'; }
 });
 $('conversation-stop-audio').addEventListener('click', () => { stopDemoSpeech(); $('conversation-status').textContent = 'Audio stopped.'; });
 $('conversation-clear').addEventListener('click', clearConversation);
@@ -526,7 +563,7 @@ async function openSession() {
     return;
   }
   show('lesson-view');
-  $('lesson-guide').setAttribute('data-mood', 'idle');
+  setGuideMood('lesson-guide', 'idle');
   const step = lesson.stages[session.stage_index];
   const pathway = $('stage-pathway'); pathway.replaceChildren();
   lesson.stages.forEach((item, index) => {
@@ -576,7 +613,7 @@ async function openSession() {
       function chooseLetter(index) {
         if (!Number.isInteger(index) || index < 0 || index >= tiles.length || tiles[index].disabled) return;
         tiles[index].disabled = true; selected.push(index); updateTray();
-        $('lesson-guide').setAttribute('data-mood', 'react');
+        setGuideMood('lesson-guide', 'react');
       }
       symbols.forEach((letter, index) => {
         const tile = button(letter, () => chooseLetter(index));
@@ -628,7 +665,7 @@ async function runAction(action, extra = {}) {
     await openSession();
     // Acknowledges a successful save or completion, not correctness or mastery.
     if (current(stamp) && state.session === data.session && (action === 'respond' || action === 'complete')) {
-      $('lesson-guide').setAttribute('data-mood', 'celebrate');
+      setGuideMood('lesson-guide', 'celebrate');
     }
   } catch (error) { if (current(stamp) && state.session === session) { clearLessonData(); show('dashboard'); message(friendlyError(error), true); } }
 }

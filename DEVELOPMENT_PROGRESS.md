@@ -165,3 +165,43 @@ The separate adult dashboard experiment in `prototype/web/` supports typed quest
 `tests/test_companion_conversation.py`, `tests/test_app_server.py`, and the browserless harness exercise validation, access, bounded history, response handling and speech controls with mocks. The real model, browser microphone, audio playback and end-to-end conversation remain unverified because no model was installed and local socket access was denied. Live Render cannot run this experiment with its current settings. Remaining requirements include age-appropriate safety, verified identity and consent, privacy and retention, model and voice review, lesson-specific authorization, withdrawal and transactional assistance tracking, and real-device accessibility testing before children use the feature. Next bounded task: configure an appropriate self-hosted or hosted model for synthetic-only testing, then test real browser and model behavior.
 
 Verification: `python3 -m unittest discover -s tests -q` passed 231 tests; `node --check prototype/web/app.js` and `git diff --check` passed. These are not real-device, real-model or child-safety tests.
+
+## Illustrated welcome redesign
+
+In response to the owner's request for a more polished and playful welcome page,
+`prototype/web/index.html` and `styles.css` have been redesigned around an
+original generated reading-garden illustration in `prototype/web/hero-world.png`.
+The image is served through the explicit static allowlist in
+`prototype/app_server.py`, with an in-process delivery test in
+`tests/test_app_server.py`. `docs/ARTWORK_PROVENANCE.md` records the artwork's
+origin and pending owner approval for publication. Existing login, lesson,
+synthetic-data notice, reduced-motion and simplified-visual controls remain.
+
+Verification: `python3 -m unittest discover -s tests -q` passed 232 tests;
+`node --check prototype/web/app.js`, `git diff --check`, and a check of all
+JavaScript-referenced HTML IDs passed. A Chromium screenshot was attempted but
+the environment denied the required browser sandbox socket, so actual browser,
+mobile and accessibility rendering remain unverified. This is a visual redesign,
+not an implementation of child-facing AI, conversation, or additional lessons.
+The new artwork and code are local and have not been deployed. Next bounded
+task: owner review of the artwork and visual browser testing after staging.
+
+## Animated companion scene
+
+After the owner asked for a more cinematic, animated experience, replaced the
+static welcome illustration with an original generated reading-garden
+background and a layered SVG seed character. CSS animates its breathing, eyes,
+arms, leaves, gestures and speaking mouth; `prototype/web/app.js` connects its
+reaction, celebration and talking states to the wave button, fictional lesson
+interactions and explicitly started voice sample. The companion also appears in
+the existing lesson and voice demo. The animation respects reduced-motion and
+simplified-visual settings; celebration acknowledges a saved response, not
+correctness or mastery. The source and asset remain local pending owner review.
+
+This is an interactive 2D web animation, not a 3D animated film or AI tutor.
+No actual AI conversation is enabled on Render, and the fictional-data limits
+still apply. Browser rendering and animation have not been verified because the
+environment denied Chromium's sandbox socket. The static image and HTML/JS
+interfaces are covered by automated tests and the mocked DOM interaction
+harness. Next bounded task: owner review followed by real-browser and mobile
+testing of the staged animation.

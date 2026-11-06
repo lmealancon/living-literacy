@@ -85,9 +85,90 @@ html[data-motion="off"] *,html[data-motion="off"] *::before,html[data-motion="of
 
 html[data-visuals="simple"] .hero-scene {display:none}
 html[data-visuals="simple"] .lesson-guide {display:none}
+html[data-visuals="simple"] .hero-greet,html[data-motion="off"] .hero-greet {display:none}
 html[data-visuals="simple"] .hero {grid-template-columns:1fr}
+
+/* Original articulated companion: separate limbs, face, leaves, and body. */
+.hero-animated-guide {position:absolute;z-index:2;right:0;bottom:-1%;width:min(58%, 430px);pointer-events:none;filter:drop-shadow(0 12px 14px #173c3d47)}
+.hero-caption,.hero-art-sparkle {z-index:3}
+.seed-puppet {display:block;width:100%;height:auto;overflow:visible}
+.puppet-performer,.puppet-body,.puppet-eyes,.puppet-leaves,.puppet-arm-left,.puppet-arm-right,.puppet-speaking-mouth {transform-box:fill-box}
+.puppet-performer {transform-origin:50% 90%;animation:puppet-idle 5s ease-in-out infinite}
+.puppet-body {transform-origin:50% 90%;animation:puppet-breathe 4s ease-in-out infinite}
+.puppet-eyes {transform-origin:50% 50%;animation:puppet-blink 5.4s ease-in-out infinite}
+.puppet-leaves {transform-origin:50% 100%;animation:puppet-leaf 4.2s ease-in-out infinite}
+.puppet-arm-left {transform-origin:100% 75%;animation:puppet-hello-left 7s ease-in-out infinite}
+.puppet-arm-right {transform-origin:0% 75%;animation:puppet-hello-right 7s ease-in-out infinite}
+.puppet-shadow {transform-origin:50% 50%;animation:puppet-shadow 5s ease-in-out infinite}
+.puppet-speaking-mouth {opacity:0;transform-origin:50% 50%}
+[data-mood="react"] .puppet-performer {animation:puppet-react .75s ease-in-out}
+[data-mood="react"] .puppet-arm-right {animation:puppet-wave .75s ease-in-out 2}
+[data-mood="celebrate"] .puppet-performer {animation:puppet-celebrate .9s ease-in-out 2}
+[data-mood="celebrate"] .puppet-arm-left {animation:puppet-wave-left .7s ease-in-out 2}
+[data-mood="celebrate"] .puppet-arm-right {animation:puppet-wave .7s ease-in-out 2}
+[data-mood="talking"] .puppet-performer {animation:puppet-chat 1.5s ease-in-out infinite}
+[data-mood="talking"] .puppet-smile {opacity:0}
+[data-mood="talking"] .puppet-speaking-mouth {opacity:1;animation:puppet-speak .35s ease-in-out infinite alternate}
+.hero-greet {display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:55px;padding:.8rem 1rem;border:2px solid #b7c9ee;border-radius:15px;background:#fff;color:#2656a5;font-weight:800;cursor:pointer}
+.hero-greet:hover {background:#eef5ff}
+.hero-greet:focus-visible {outline:3px solid #f5aa37;outline-offset:3px}
+@keyframes puppet-idle {0%,100%{transform:translateY(0) rotate(-1deg)}48%{transform:translateY(-7px) rotate(2deg)}75%{transform:translateY(-2px) rotate(-1deg)}}
+@keyframes puppet-breathe {0%,100%{transform:scale(1)}50%{transform:scale(1.025,.99)}}
+@keyframes puppet-blink {0%,41%,45%,100%{transform:scaleY(1)}43%{transform:scaleY(.08)}86%,90%{transform:scaleY(1)}88%{transform:scaleY(.08)}}
+@keyframes puppet-leaf {0%,100%{transform:rotate(-3deg)}50%{transform:rotate(5deg)}}
+@keyframes puppet-hello-left {0%,70%,100%{transform:rotate(0)}76%{transform:rotate(-7deg)}82%{transform:rotate(3deg)}}
+@keyframes puppet-hello-right {0%,70%,100%{transform:rotate(0)}76%{transform:rotate(9deg)}82%{transform:rotate(-4deg)}}
+@keyframes puppet-shadow {0%,100%{transform:scaleX(1);opacity:.18}48%{transform:scaleX(.88);opacity:.13}}
+@keyframes puppet-wave {0%,100%{transform:rotate(0)}50%{transform:rotate(-20deg)}}
+@keyframes puppet-wave-left {0%,100%{transform:rotate(0)}50%{transform:rotate(20deg)}}
+@keyframes puppet-react {0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-16px) rotate(-7deg)}70%{transform:translateY(-3px) rotate(4deg)}}
+@keyframes puppet-celebrate {0%,100%{transform:translateY(0) rotate(0)}35%{transform:translateY(-24px) rotate(6deg)}70%{transform:translateY(-6px) rotate(-5deg)}}
+@keyframes puppet-chat {0%,100%{transform:rotate(-2deg)}50%{transform:rotate(3deg)}}
+@keyframes puppet-speak {from{transform:scaleY(.35)}to{transform:scaleY(1)}}
 html[data-visuals="simple"] .vibes-grid article {background:#fffdf7}
 .activity-item {gap:.9rem;background:#fff9e9;border:1px solid #ebd7aa!important;border-radius:16px;padding:1rem;margin:.7rem 0;box-shadow:0 4px 0 #ecdfc2}
 .activity-item>div {flex:1;min-width:0}.activity-item strong {display:block;font-size:1.06rem}.activity-kicker {display:block;margin-bottom:.3rem;color:#7c5708;font-size:.69rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .activity-icon {display:grid;place-items:center;flex:none;width:54px;height:54px;border-radius:17px;background:#f4de9b;color:#704900;font-size:1.5rem}
 .activity-item .primary {min-width:5.3rem}
+
+/* An original, colorful welcome for the synthetic family demo. */
+:root {--page:#f7f9ff;--surface:#fff;--ink:#162851;--muted:#53627a;--teal:#235f86;--line:#d9e4ed}
+body {background:linear-gradient(180deg,#fff 0,#fff 42rem,#f7f9ff 68rem);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.header {min-height:82px;max-width:1380px;margin:auto;padding:1rem max(4vw,1.25rem);background:#fff;color:#192a55;border-bottom:1px solid #edf0f5}
+.brand {display:inline-flex;align-items:center;gap:.55rem;font:800 1.35rem/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.045em;color:#172c5c}
+.brand .brand-mark {display:grid;place-items:center;width:2.15rem;height:2.15rem;border-radius:14px;background:#ffd568;color:#172c5c;font-size:1.2rem;transform:rotate(-8deg)}
+.brand .brand-accent {color:#235ac5}
+.header .quiet {color:#344966;border-color:#ced8e6;background:#fff}
+.header .quiet:hover:not(:disabled) {border-color:#4074c4;background:#f3f7ff}
+main {max-width:1320px;padding:2.8rem max(4vw,1.25rem) 5rem}
+.hero {grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:clamp(2rem,5vw,4.5rem);padding:clamp(.5rem,2vw,1.4rem) 0 1rem;background:transparent;border:0;border-radius:0;box-shadow:none;overflow:visible}
+.hero-copy {padding:1.3rem 0}
+.hero-eyebrow {display:inline-flex;align-items:center;gap:.45rem;margin:0;padding:.55rem .8rem;border-radius:999px;background:#f0f5ff;color:#2857a5;letter-spacing:.12em;font-size:.72rem}
+.hero-eyebrow span {color:#de8a23;font-size:1rem;line-height:1}
+.hero h1 {font:850 clamp(3rem,5.4vw,5rem)/1.04 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.065em;color:#152954;margin:1.1rem 0 1.2rem}
+.hero h1 em {font-style:normal;font-weight:850;color:#2364d5}
+.hero .lead {max-width:32rem;margin:0;color:#465974;font-size:clamp(1.03rem,1.35vw,1.2rem);line-height:1.65}
+.hero-actions {display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.8rem}
+.hero-button {display:inline-flex;align-items:center;justify-content:center;gap:1.1rem;min-height:55px;padding:.9rem 1.35rem;border-radius:15px;background:#235bd4;color:white;text-decoration:none;font-weight:800;box-shadow:0 6px 0 #173f9e,0 12px 24px #2863d22b;transition:transform .16s ease,box-shadow .16s ease}
+.hero-button span {font-size:1.25rem;line-height:1}.hero-button:hover {transform:translateY(-2px);box-shadow:0 8px 0 #173f9e,0 14px 24px #2863d22b}
+.hero-action-note {font-size:.85rem;color:#687991;font-weight:650}
+.companion-welcome-message {max-width:34rem;margin-top:2rem;padding:1rem 1.15rem;background:#f4f8ff;border:1px solid #d6e5f6;border-radius:18px;color:#203d69}
+.companion-welcome-message .eyebrow {color:#42699a}.companion-welcome-message p:not(.eyebrow){font-size:.95rem;line-height:1.5}
+.companion-links a {color:#2457ae;text-decoration:none}.companion-links a:hover {text-decoration:underline}
+.hero-scene.companion-welcome {position:relative;max-width:none;min-height:420px;aspect-ratio:1.08/1;align-self:stretch;padding:0;border-radius:34px;background:linear-gradient(145deg,#d5efff,#d5dfff 55%,#e9def8);overflow:visible;box-shadow:0 20px 55px #3860a126}
+.hero-art {display:block;width:100%;height:100%;position:absolute;inset:0;object-fit:cover;border-radius:34px}
+.hero-art-sparkle {position:absolute;color:#ffe47b;text-shadow:0 2px 7px #38518055;font-size:2rem}.hero-art-sparkle-one{top:1.4rem;left:1.6rem}.hero-art-sparkle-two{right:1.6rem;top:1.7rem;color:#fff;font-size:1.25rem}
+.hero-caption {position:absolute;left:-1rem;bottom:1.5rem;display:flex;align-items:center;gap:.8rem;padding:.85rem 1.05rem;background:#fff;border:1px solid #edf0f7;border-radius:18px;box-shadow:0 10px 25px #284b7f29;color:#1c3562;font-weight:800;font-size:.9rem}
+.hero-caption small {display:block;color:#62738b;font-weight:500;font-size:.74rem;margin-top:.15rem}.hero-caption-icon {display:grid;place-items:center;width:2.4rem;height:2.4rem;border-radius:12px;background:#fff0c2;color:#9d6000;font-size:1.25rem}
+.notice {margin:2.2rem 0 1.4rem;background:#fff8df;border-left-color:#e9ac36;color:#51400f}
+.card {box-shadow:0 10px 30px #203b6a0b}.narrow {max-width:620px}
+#login-view {border-color:#dfe7f2;border-radius:24px}#login-view .eyebrow {color:#355db0}#login-view h2 {font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.045em;color:#172b55}
+button.primary,form button[type=submit] {background:#225bd2;color:#fff;border-color:#174bb4;box-shadow:0 4px 0 #173e94}
+button.primary:hover:not(:disabled),form button[type=submit]:hover:not(:disabled) {border-color:#173e94}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible,a:focus-visible,select:focus-visible {outline-color:#a83f1c}
+@media(max-width:700px){
+  .header {gap:.7rem}.brand {font-size:1.08rem}.brand .brand-mark {width:1.85rem;height:1.85rem}
+  main {padding-top:1.5rem}.hero {grid-template-columns:1fr;gap:1.5rem;padding:0}.hero-copy {grid-row:1;padding:.25rem 0 0}.hero-scene.companion-welcome {grid-row:2;min-height:280px;aspect-ratio:1.18/1;margin:0 .4rem}.hero h1{font-size:clamp(2.7rem,11vw,4rem)}.hero .lead{font-size:1rem}.hero-actions{margin-top:1.2rem}.companion-welcome-message{margin-top:1.4rem}.hero-caption{left:-.5rem;bottom:1rem}.notice{margin-top:1.6rem}
+}
+html[data-visuals="simple"] .hero-scene {display:none}
+html[data-visuals="simple"] .hero {grid-template-columns:1fr}

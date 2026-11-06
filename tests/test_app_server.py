@@ -48,6 +48,20 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.csrf = data['csrf']
 
+    def test_welcome_illustration_is_served_as_png(self):
+        request = self.handler.__new__(self.handler)
+        request.server = SimpleNamespace(server_port=8765)
+        request.path = '/hero-world.png'
+        request.headers = {'Host': '127.0.0.1:8765'}
+        request.rfile = BytesIO(); request.wfile = BytesIO(); headers = {}
+        request.send_response = lambda status: headers.update(status=status)
+        request.send_header = lambda key, value: headers.update({key: value})
+        request.end_headers = lambda: None
+        request.do_GET()
+        self.assertEqual(headers['status'], 200)
+        self.assertEqual(headers['Content-Type'], 'image/png')
+        self.assertTrue(request.wfile.getvalue().startswith(b'\x89PNG\r\n\x1a\n'))
+
     def test_login_profile_lesson_and_history(self):
         self.login()
         self.assertEqual(self.call('GET', '/api/me')[1]['identity'], 'synthetic-parent-a')

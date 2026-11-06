@@ -49,10 +49,16 @@ function harness(fetch, {reduceMotion = false, initialPreferences = {}, legacyMe
     change(matches) { this.matches = matches; for (const listener of listeners) listener({matches}); }
   };
   if (legacyMedia) delete mediaQuery.addEventListener;
-  const window = { matchMedia: () => mediaQuery };
+  const timers = new Map(); let timerId = 0;
+  const window = {
+    matchMedia: () => mediaQuery,
+    setTimeout(callback) { const id = ++timerId; timers.set(id, callback); return id; },
+    clearTimeout(id) { timers.delete(id); }
+  };
+  const runTimers = () => { const callbacks = Array.from(timers.values()); timers.clear(); callbacks.forEach(callback => callback()); };
   const context = vm.createContext({document, fetch, window, localStorage, crypto: {randomUUID: () => 'fictional-test-uuid-12345678'}, console});
   vm.runInContext(fs.readFileSync('prototype/web/app.js', 'utf8'), context);
-  return {nodes, document, context, stored, mediaQuery, window};
+  return {nodes, document, context, stored, mediaQuery, window, timers, runTimers};
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -270,6 +276,38 @@ async function testFixedVoiceDemo() {
   assert.equal(noVoice.document.getElementById('voice-demo-text').textContent, 'Hello! It is nice to meet you.');
   assert(noVoice.document.getElementById('voice-demo-status').textContent.includes('unavailable'));
 }
+async function testCompanionMotionReactsAndResets() {
+  const h = harness(url => url === '/api/me' ? Promise.resolve(response({}, 403)) : Promise.resolve(response({ok:true})));
+  await tick();
+  const hero = h.document.getElementById('hero-animated-guide');
+  h.document.getElementById('hero-greet').events.click();
+  assert.equal(hero.attrs['data-mood'], 'react');
+  assert(h.document.getElementById('companion-greeting').textContent.includes('happy'), 'wave has a text response');
+  assert.equal(h.timers.size, 1, 'a wave schedules one reset');
+  h.document.getElementById('hero-greet').events.click();
+  assert.equal(hero.attrs['data-mood'], 'react');
+  assert.equal(h.timers.size, 1, 'repeated taps replace the previous reset');
+  h.runTimers();
+  assert.equal(hero.attrs['data-mood'], 'idle', 'reaction returns to idle');
+
+  const spoken = [];
+  h.window.speechSynthesis = {speak: utterance => spoken.push(utterance), cancel() {}};
+  h.window.SpeechSynthesisUtterance = function(text) { this.text = text; };
+  h.document.getElementById('voice-demo-hello').events.click();
+  assert.equal(hero.attrs['data-mood'], 'talking', 'voice playback moves the companion');
+  assert.equal(h.document.getElementById('voice-demo-guide').attrs['data-mood'], 'talking');
+  spoken[0].onend();
+  assert.equal(hero.attrs['data-mood'], 'idle', 'voice completion stops talking');
+  h.document.getElementById('voice-demo-hello').events.click();
+  h.document.getElementById('voice-demo-stop').events.click();
+  assert.equal(hero.attrs['data-mood'], 'idle', 'stop also stops talking');
+  h.document.getElementById('hero-greet').events.click();
+  h.mediaQuery.change(true);
+  assert.equal(hero.attrs['data-mood'], 'idle', 'reduced motion clears an active reaction');
+  assert.equal(h.timers.size, 0, 'reduced motion cancels pending reactions');
+  h.document.getElementById('hero-greet').events.click();
+  assert.equal(hero.attrs['data-mood'], 'idle', 'no reaction plays while the device requests reduced motion');
+}
 async function testCompanionAcrossViewsAndOptionalAI() {
   const pendingReply = deferred();
   const calls = [];
@@ -453,4 +491,4 @@ async function testEscapedConversationPayloadIsBounded() {
   assert(lengths.some((length, index) => index >= 3 && length < 6), 'oldest pairs should be dropped when escaped JSON would be too large');
 }
 
-(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); await testCompanionAcrossViewsAndOptionalAI(); await testSyntheticConversation(); await testConversationMicrophoneAndStaleReply(); await testEscapedConversationPayloadIsBounded(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
+(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); await testCompanionMotionReactsAndResets(); await testCompanionAcrossViewsAndOptionalAI(); await testSyntheticConversation(); await testConversationMicrophoneAndStaleReply(); await testEscapedConversationPayloadIsBounded(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
