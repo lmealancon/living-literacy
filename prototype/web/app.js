@@ -3,6 +3,7 @@
 const $ = id => document.getElementById(id);
 const state = { csrf: null, identity: null, profiles: [], lessons: [], profile: null, session: null, history: [], epoch: 0 };
 const conversation = {history: [], version: 0, busy: false, lastReply: '', recognition: null};
+let readingWorld = null;
 const guideTimers = new Map();
 // Motion is optional; never override a device-level reduced-motion preference.
 const motionButton = $('motion-toggle');
@@ -88,6 +89,7 @@ function clearProfileData() {
 }
 function clearProtectedData() {
   clearProfileData();
+  readingWorld?.reset();
   state.profiles = []; state.lessons = []; state.profile = null;
   $('companion-ai-demo').hidden = true;
   $('companion-conversation').hidden = true;
@@ -175,6 +177,9 @@ function show(view) {
   if (view !== 'dashboard') { stopDemoSpeech(); clearConversation(); }
   setGuideMood('hero-animated-guide', view === 'dashboard' ? 'react' : 'idle');
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
+  const worldRoot = $('reading-world-root');
+  if (worldRoot) worldRoot.hidden = view === 'lesson-view';
+  if (view === 'lesson-view') readingWorld?.pause(); else readingWorld?.resume();
   $('companion-greeting').textContent = view === 'dashboard'
     ? 'Welcome back! Choose a fictional profile and an activity to explore together.'
     : 'Hello! Welcome to our reading adventure. Sign in to explore the fictional demo.';
@@ -716,6 +721,22 @@ $('back').addEventListener('click', async () => {
   const stamp = snapshot();
   try { message(''); await loadDashboard(); } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
 });
+// The garden only navigates to existing views. The server still authorizes
+// profiles, lessons and every session operation.
+if (typeof window.LivingReadingWorld?.mount === 'function') {
+  readingWorld = window.LivingReadingWorld.mount($('reading-world-root'), {navigate(destination) {
+    const targets = {signin: state.identity ? 'profiles-title' : 'login-title',
+      activities: state.identity ? 'lesson-list-title' : 'login-title',
+      voice: state.identity ? 'voice-demo-title' : 'login-title'};
+    if (!Object.hasOwn(targets, destination)) return;
+    const target = $(targets[destination]);
+    if (target) {
+      target.scrollIntoView?.({behavior: 'auto', block: 'start'});
+      target.setAttribute('tabindex', '-1');
+      target.focus?.({preventScroll: true});
+    }
+  }});
+}
 (async function initialize() {
   const stamp = snapshot();
   try {

@@ -16,7 +16,8 @@ class Node {
   append(...children) { this.children.push(...children); }
   appendChild(child) { this.append(child); return child; }
   replaceChildren(...children) { this._text = ''; this.children = children; }
-  focus() {}
+  focus() { this.focused = true; }
+  scrollIntoView() { this.scrolled = true; }
   descendants() { return this.children.flatMap(child => [child, ...child.descendants()]); }
   querySelector(selector) {
     const nodes = this.descendants();
@@ -31,7 +32,7 @@ class Node {
 }
 function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise, resolve}; }
 function response(data, status = 200) { return {ok: status >= 200 && status < 300, status, json: async () => data}; }
-function harness(fetch, {reduceMotion = false, initialPreferences = {}, legacyMedia = false} = {}) {
+function harness(fetch, {reduceMotion = false, initialPreferences = {}, legacyMedia = false, worldMock = null} = {}) {
   const nodes = new Map();
   const stored = new Map(Object.entries(initialPreferences));
   const document = {
@@ -55,6 +56,7 @@ function harness(fetch, {reduceMotion = false, initialPreferences = {}, legacyMe
     setTimeout(callback) { const id = ++timerId; timers.set(id, callback); return id; },
     clearTimeout(id) { timers.delete(id); }
   };
+  if (worldMock) window.LivingReadingWorld = worldMock;
   const runTimers = () => { const callbacks = Array.from(timers.values()); timers.clear(); callbacks.forEach(callback => callback()); };
   const context = vm.createContext({document, fetch, window, localStorage, crypto: {randomUUID: () => 'fictional-test-uuid-12345678'}, console});
   vm.runInContext(fs.readFileSync('prototype/web/app.js', 'utf8'), context);
@@ -491,4 +493,37 @@ async function testEscapedConversationPayloadIsBounded() {
   assert(lengths.some((length, index) => index >= 3 && length < 6), 'oldest pairs should be dropped when escaped JSON would be too large');
 }
 
-(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); await testCompanionMotionReactsAndResets(); await testCompanionAcrossViewsAndOptionalAI(); await testSyntheticConversation(); await testConversationMicrophoneAndStaleReply(); await testEscapedConversationPayloadIsBounded(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
+async function testReadingWorldNavigationAndViewLifecycle() {
+  const events = [];
+  let navigate;
+  const worldMock = {mount(root, options) {
+    navigate = options.navigate;
+    return {pause(){events.push('pause');}, resume(){events.push('resume');}, reset(){events.push('reset');}};
+  }};
+  const h = harness((url) => {
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/logout') return Promise.resolve(response({ok:true}));
+    throw new Error('Unexpected request: ' + url);
+  }, {worldMock});
+  await tick();
+  for (const destination of ['activities','voice']) {
+    h.document.getElementById('login-title').focused = false;
+    navigate(destination);
+    assert.equal(h.document.getElementById('login-title').focused, true, 'signed-out destinations go to sign-in');
+  }
+  vm.runInContext("state.identity='synthetic-adult'; state.csrf='csrf'; state.profile='synthetic-profile'",h.context);
+  navigate('activities');
+  assert.equal(h.document.getElementById('lesson-list-title').focused,true);
+  navigate('voice');
+  assert.equal(h.document.getElementById('voice-demo-title').focused,true);
+  vm.runInContext("show('lesson-view')",h.context);
+  assert.equal(h.document.getElementById('reading-world-root').hidden,true);
+  assert.equal(events.at(-1),'pause');
+  vm.runInContext("show('dashboard')",h.context);
+  assert.equal(h.document.getElementById('reading-world-root').hidden,false);
+  assert.equal(events.at(-1),'resume');
+  await h.document.getElementById('logout').events.click();
+  assert(events.includes('reset'),'logout resets the game position');
+}
+
+(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); await testCompanionMotionReactsAndResets(); await testCompanionAcrossViewsAndOptionalAI(); await testSyntheticConversation(); await testConversationMicrophoneAndStaleReply(); await testEscapedConversationPayloadIsBounded(); await testReadingWorldNavigationAndViewLifecycle(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });

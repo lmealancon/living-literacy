@@ -205,3 +205,31 @@ environment denied Chromium's sandbox socket. The static image and HTML/JS
 interfaces are covered by automated tests and the mocked DOM interaction
 harness. Next bounded task: owner review followed by real-browser and mobile
 testing of the staged animation.
+
+## Exploratory Reading Garden prototype
+
+The owner requested a playful animated world with game-like exploration.
+Reviewed the official *The Secret Life of Pets* teaser listing and film
+descriptions for broad character and world-building inspiration; direct trailer
+playback was unavailable. No characters, visuals or game content were copied.
+
+`prototype/web/reading-world.js` and `reading-world.css` implement an original
+2D canvas garden over the generated local background. The fictional companion
+moves using keyboard or on-screen controls; map hotspots and ordinary buttons
+navigate to the existing sign-in, activity and voice sections. The game does not
+create or authorize a lesson. Signed-out visitors are directed to sign-in; the
+map pauses during lessons and resets on sign-out. A text-button fallback works
+when canvas is unavailable, and simplified visuals retain the destination
+buttons. `prototype/app_server.py` serves the new self-hosted assets.
+
+`tests/reading_world_harness.js`, `tests/test_reading_world.py`,
+`tests/web_privacy_harness.js`, and `tests/test_app_server.py` cover movement,
+navigation, fallback, app lifecycle and asset delivery using mocks. The full
+local suite passed 234 tests, and both JavaScript syntax checks and
+`git diff --check` passed. The app has not been tested in a real browser,
+on a phone or with a screen reader, and the changes remain local. This is a
+small interactive 2D prototype, not a 3D open-world game or animated feature,
+and it does not enable real-child use, a new lesson library or live AI.
+The generated background and character are still pending owner review for
+publication. Next bounded task: obtain the owner's visual review and run
+real-browser interaction and accessibility tests before expanding the world.

@@ -62,6 +62,23 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(headers['Content-Type'], 'image/png')
         self.assertTrue(request.wfile.getvalue().startswith(b'\x89PNG\r\n\x1a\n'))
 
+    def test_reading_world_assets_are_served_with_expected_types(self):
+        for path, expected in [('/reading-world.js', 'application/javascript; charset=utf-8'),
+                               ('/reading-world.css', 'text/css; charset=utf-8')]:
+            with self.subTest(path=path):
+                request = self.handler.__new__(self.handler)
+                request.server = SimpleNamespace(server_port=8765)
+                request.path = path
+                request.headers = {'Host': '127.0.0.1:8765'}
+                request.rfile = BytesIO(); request.wfile = BytesIO(); headers = {}
+                request.send_response = lambda status: headers.update(status=status)
+                request.send_header = lambda key, value: headers.update({key: value})
+                request.end_headers = lambda: None
+                request.do_GET()
+                self.assertEqual(headers['status'], 200)
+                self.assertEqual(headers['Content-Type'], expected)
+                self.assertTrue(request.wfile.getvalue())
+
     def test_login_profile_lesson_and_history(self):
         self.login()
         self.assertEqual(self.call('GET', '/api/me')[1]['identity'], 'synthetic-parent-a')

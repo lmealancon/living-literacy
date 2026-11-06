@@ -1,0 +1,25 @@
+/* Original synthetic Reading Garden exploration scene. */
+.reading-world {margin:2rem 0;padding:clamp(1rem,3vw,1.8rem);border:1px solid #dce7f3;border-radius:26px;background:linear-gradient(145deg,#f7fbff,#f3faf0);box-shadow:0 12px 32px #284d6a12;color:#1d3954}
+.reading-world-intro {max-width:50rem;margin:0 0 1.15rem}
+.reading-world-eyebrow {margin:0 0 .45rem;font-size:.73rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#31765b}
+.reading-world-heading {margin:.2rem 0 .45rem;color:#17345d;font-size:clamp(1.5rem,3vw,2.35rem);line-height:1.15}
+.reading-world-description {margin:0;color:#496278;line-height:1.5}
+.reading-world-frame {overflow:hidden;border:2px solid #fff;border-radius:18px;background:#d6edce;box-shadow:0 7px 20px #1f534924}
+.reading-world-canvas {display:block;width:100%;height:auto;aspect-ratio:16/9;outline-offset:-5px;touch-action:manipulation;cursor:pointer}
+.reading-world-canvas[hidden] {display:none}
+.reading-world-canvas:focus-visible {outline:4px solid #174db4}
+.reading-world-status {min-height:1.6em;margin:.8rem 0;color:#274e42;font-weight:700}
+.reading-world-controls {display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.reading-world-directions {display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.reading-world-control-label {margin-right:.25rem;color:#526678;font-weight:700}
+.reading-world button {min-height:46px;border:1px solid #b7cfe1;border-radius:12px;background:#fff;color:#173e60;font:700 1rem system-ui,sans-serif;cursor:pointer}
+.reading-world button:hover:not(:disabled) {background:#e7f4ff;border-color:#83b4dd}
+.reading-world button:focus-visible {outline:3px solid #225fd0;outline-offset:3px}
+.reading-world button:disabled {opacity:.55;cursor:default}
+.reading-world .reading-world-direction {min-width:48px;padding:.45rem .7rem;font-size:1.3rem}
+.reading-world .reading-world-explore {padding:.65rem 1rem;border-color:#1f5bb5;background:#2868cc;color:white}
+.reading-world .reading-world-explore:hover:not(:disabled) {background:#184da5}
+.reading-world-destinations {display:flex;gap:.55rem;flex-wrap:wrap;margin-top:1rem}
+.reading-world .reading-world-destination {padding:.62rem .9rem;background:#f9fcff}
+html[data-visuals="simple"] .reading-world-frame,html[data-visuals="simple"] .reading-world-controls,html[data-visuals="simple"] .reading-world-status {display:none}
+@media(max-width:600px){.reading-world{margin:1rem 0;padding:1rem}.reading-world-controls{gap:.7rem}.reading-world-directions{width:100%}.reading-world-destinations{display:grid;grid-template-columns:1fr}.reading-world .reading-world-destination{text-align:left}}
