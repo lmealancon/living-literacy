@@ -1,0 +1,21 @@
+{
+  "format": "living-literacy.synthetic-extension-package.v0.1",
+  "manifest": {
+    "extension_id": "synthetic.example",
+    "version": "1.0.0",
+    "contract_version": "0.1",
+    "kind": "curriculum",
+    "capabilities": ["lesson.read"],
+    "data_scope": "synthetic_only"
+  },
+  "records": [
+    {
+      "id": "synthetic-example",
+      "version": "1.0.0",
+      "status": "draft",
+      "provenance": "Fictional developer-only example; no instructional content.",
+      "rights": "Not evaluated; not a license or permission grant.",
+      "payload": {"description": "Placeholder data for offline contract testing only."}
+    }
+  ]
+}

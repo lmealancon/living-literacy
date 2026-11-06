@@ -24,6 +24,10 @@ from prototype.lesson_engine import PolicyError, ConflictError
 from prototype.persistent_store import SyntheticSQLiteStore
 from prototype.synthetic_auth import SyntheticParentAuth, resolve
 from prototype.family_insights import SyntheticFamilyInsights
+from prototype.synthetic_narration_store import SyntheticNarrationStore
+from prototype.curriculum_overview import candidate_domains
+from prototype.assessment_service import SyntheticAssessmentService
+from prototype.assessment_workflow import SyntheticAssessmentWorkflow
 
 WEB = Path(__file__).parent / 'web'
 MAX_REQUEST = 4096
@@ -72,7 +76,8 @@ def bootstrap(filename, identity, password):
 
 
 class App:
-    def __init__(self, filename, *, staging_origin=None, proxy_secret=None):
+    def __init__(self, filename, *, staging_origin=None, proxy_secret=None,
+                 synthetic_audio_enabled=False):
         self.staging_origin = staging_origin
         self.proxy_secret = proxy_secret
         self.staging_host = validate_staging_config(staging_origin, proxy_secret) if staging_origin else None
@@ -81,6 +86,13 @@ class App:
         self.store = SyntheticSQLiteStore(filename)
         self.auth = SyntheticParentAuth(self.store)
         self.family_insights = SyntheticFamilyInsights(self.store)
+        self.assessment_service = SyntheticAssessmentService(self.store)
+        self.assessment_workflow = SyntheticAssessmentWorkflow(self.store)
+        # Prototype-only opt-in for in-process tests and future reviewed local
+        # fixtures. The shipped CLI never enables this, and no audio is seeded.
+        if type(synthetic_audio_enabled) is not bool:
+            raise ValueError('Invalid synthetic audio flag')
+        self.synthetic_narration = SyntheticNarrationStore(self.store) if synthetic_audio_enabled else None
         self.csrf_secret = secrets.token_bytes(32)
 
     def csrf(self, token):
@@ -109,18 +121,9 @@ class App:
             return [json.loads(row[0]) for row in db.execute('SELECT payload FROM sessions WHERE student_id=? ORDER BY rowid DESC', (student_id,))]
 
     def lessons(self):
-        with self.store._connect() as db:
-            try:
-                versions = list(db.execute("SELECT lesson_id,version FROM content_versions WHERE status='approved_for_prototype'"))
-            except sqlite3.OperationalError:
-                return []
-        lessons = []
-        for lesson_id, version in versions:
-            try:
-                lessons.append(self.store.content_for_demo(lesson_id, version))
-            except PolicyError:
-                pass
-        return lessons
+        # Registry listing verifies status and integrity in one snapshot. The
+        # detail and session endpoints independently re-check on every use.
+        return self.store.content_registry().list_for_synthetic_demo()
 
 
 def make_handler(app):
@@ -128,7 +131,7 @@ def make_handler(app):
         def log_message(self, format, *args):
             pass
 
-        def send_body(self, status, body, content_type='application/json; charset=utf-8', cookie=None):
+        def send_body(self, status, body, content_type='application/json; charset=utf-8', cookie=None, extra_headers=None):
             if not isinstance(body, bytes):
                 body = json.dumps(body).encode('utf-8')
             self.send_response(status)
@@ -139,6 +142,9 @@ def make_handler(app):
             self.send_header('Content-Security-Policy', "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
             if cookie:
                 self.send_header('Set-Cookie', cookie)
+            if extra_headers:
+                for name, value in extra_headers.items():
+                    self.send_header(name, str(value))
             self.end_headers()
             self.wfile.write(body)
 
@@ -188,7 +194,15 @@ def make_handler(app):
                     return self.send_body(200, {'profiles': app.profiles(token)})
                 if path == '/api/lessons':
                     return self.send_body(200, {'lessons': app.lessons()})
+                if path == '/api/curriculum/domains':
+                    return self.send_body(200, candidate_domains())
                 parts = path.strip('/').split('/')
+                if len(parts) == 5 and parts[:3] == ['api', 'v1', 'students'] and parts[4] == 'assessment-forms':
+                    return self.send_body(200, app.assessment_service.list_forms(token, unquote(parts[3])))
+                if len(parts) == 5 and parts[:3] == ['api', 'v1', 'students'] and parts[4] == 'assessment-history':
+                    return self.send_body(200, app.assessment_workflow.history(token, unquote(parts[3])))
+                if len(parts) == 4 and parts[:3] == ['api', 'v1', 'assessment-runs']:
+                    return self.send_body(200, app.assessment_workflow.get_run(token, unquote(parts[3])))
                 if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'interests':
                     return self.send_body(200, app.family_insights.get_interests(token, unquote(parts[2])))
                 if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'activity':
@@ -243,10 +257,38 @@ def make_handler(app):
                         raise ValueError('Invalid idempotency key')
                     session = app.store.start(token, data['student_id'], data['lesson_id'], data['version'], key)
                     return self.send_body(201, {'session': asdict(session)})
+                if path == '/api/v1/assessment-runs':
+                    result = app.assessment_workflow.start(token, data['student_id'], data['form_id'],
+                                                           data['version'], data['idempotency_key'])
+                    return self.send_body(200, {'run': result})
                 parts = path.strip('/').split('/')
+                if len(parts) == 5 and parts[:3] == ['api', 'v1', 'assessment-runs']:
+                    run_id = unquote(parts[3])
+                    if parts[4] == 'responses':
+                        result = app.assessment_workflow.record_response(
+                            token, run_id, data['item_id'], data['response'], data['assisted'],
+                            data['narration'], data['revision'], data['idempotency_key'])
+                        return self.send_body(200, {'response': result})
+                    if parts[4] == 'complete':
+                        result = app.assessment_workflow.complete(token, run_id, data['revision'],
+                                                                  data['idempotency_key'])
+                        return self.send_body(200, {'run': result})
                 if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'interests':
                     result = app.family_insights.set_interests(token, unquote(parts[2]), data['interests'])
                     return self.send_body(200, result)
+                if len(parts) == 4 and parts[:2] == ['api', 'sessions'] and parts[3] == 'narration':
+                    # No fixture installation or simulated-review API is exposed.
+                    # This route remains unavailable in all shipped CLI modes.
+                    if app.synthetic_narration is None:
+                        raise PolicyError('NARRATION_UNAVAILABLE')
+                    asset_id, version, revision = data.get('asset_id'), data.get('asset_version'), data.get('revision')
+                    if (not isinstance(asset_id, str) or not asset_id.startswith('synthetic-') or len(asset_id) > 100
+                            or not isinstance(version, str) or not 1 <= len(version) <= 100
+                            or type(revision) is not int or revision < 0):
+                        raise ValueError('Invalid narration request')
+                    result = app.synthetic_narration.playback(token, unquote(parts[2]), asset_id, version, revision)
+                    return self.send_body(200, result['data'], result['content_type'],
+                                          extra_headers={'X-Living-Literacy-Revision': result['revision']})
                 if len(parts) == 4 and parts[:2] == ['api', 'sessions'] and parts[3] == 'action':
                     sid = unquote(parts[2]); action = data['action']; revision = data['revision']
                     if not isinstance(revision, int) or isinstance(revision, bool):

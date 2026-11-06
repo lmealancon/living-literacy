@@ -1,20 +1,20 @@
 # Community Edition roadmap (draft)
 
-This roadmap prioritizes a self-hostable core before optional hosted commerce. Each phase is incremental: preserve working behavior, ship tests and operational documentation, record actual results in `DEVELOPMENT_PROGRESS.md`, and explicitly retain unresolved gates. No phase implies approval to publish the repository or process real student data.
+This roadmap prioritizes a self-hostable core before optional hosted commerce. Each phase is incremental: preserve working behavior, ship tests and operational documentation, record actual results in `DEVELOPMENT_PROGRESS.md`, and explicitly retain unresolved gates. The source repository is public under the owner-selected software license. These phases do not authorize real student data or an educational production release.
 
 ## 0. Inventory and publication decisions — current
 
 - Inventory the v1.0 project, tests, code/asset origin, current data flows, third-party dependencies, names and marks; identify what may be distributed and what needs separate permission.
-- Document the CE/hosted boundary, extension design and release gates. The owner selected AGPL-3.0-only for software and approved the current name and included content for the proposed release; record separate rights and provenance for content and any additional material.
+- Document the CE/hosted boundary, extension design and release gates. The owner selected AGPL-3.0-only for software and approved the name and previously included content for publication; record separate rights and provenance for content and any additional material.
 - Make local development reproducible with clear warnings, contribution guidance and a private reporting procedure that does not invent contact details. Audit secrets and personal data before any public release.
 
-Done when the inventory and decisions are reviewable, and the owner explicitly approves publication scope. Publication must accurately describe prototype status and applicable rights.
+The owner approved the initial publication scope and the source repository is public. This phase remains open for provenance inventory, reporting contacts, and review of any additional content. Publication must accurately describe prototype status and applicable rights.
 
 ## 1. Reproducible synthetic development environment
 
 - Add non-destructive, versioned database migrations, synthetic fixtures, environment examples, local container setup, isolation of persistent data, and backup/restore documentation. Keep the existing prototype local-only; a container does not make it production-safe.
 - Run all original and added tests; verify migration from an empty database and representative previous schema, rollback/failure handling, persistence across restart and restore. Document which host operating systems and container tools were actually tested.
-- Add continuous integration when the repository is ready to host it; do not publish or enable remote services without approval.
+- Verify continuous integration on the public repository; do not enable new remote services without the required authorization.
 
 Done when a new developer can reproduce the synthetic-only environment and documented checks, and migration/restore evidence is recorded. Container security and child-data readiness are separate gates.
 

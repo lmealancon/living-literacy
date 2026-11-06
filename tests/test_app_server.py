@@ -79,6 +79,60 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(self.call('GET', '/api/history/synthetic-student-b')[0], 403)
         self.assertEqual(self.call('POST', '/api/profiles', {'anchor_id': 'synthetic-student-b', 'student_id': 'synthetic-new'})[0], 403)
 
+    def test_curriculum_domains_require_sign_in_and_remain_draft(self):
+        self.assertEqual(self.call('GET', '/api/curriculum/domains')[0], 403)
+        self.login()
+        status, data = self.call('GET', '/api/curriculum/domains')
+        self.assertEqual(status, 200)
+        self.assertEqual(data['status'], 'candidate_counts_only')
+        self.assertFalse(data['canonical_skill_definitions_present'])
+        self.assertEqual(len(data['domains']), 12)
+
+    def test_synthetic_assessment_api_requires_separate_consent_and_withdrawal(self):
+        forms_path = '/api/v1/students/synthetic-student-1/assessment-forms'
+        history_path = '/api/v1/students/synthetic-student-1/assessment-history'
+        self.assertEqual(self.call('GET', forms_path)[0], 403)
+        self.login()
+        self.assertEqual(self.call('GET', forms_path)[0], 403)
+        token = self.cookie.split('=', 1)[1]
+        trusted = self.app.assessment_workflow.assessments
+        trusted.add_reviewed_fixture('synthetic-form', 'demo-1', 'en',
+            [{'id': 'synthetic-item-1', 'prompt': 'What do you notice?'}],
+            'synthetic-author', 'synthetic-reviewer')
+        trusted.set_synthetic_consent(token, 'synthetic-student-1', True)
+        status, data = self.call('GET', forms_path)
+        self.assertEqual(status, 200)
+        self.assertEqual(data['forms'][0]['validation_status'], 'unvalidated')
+        request = {'student_id': 'synthetic-student-1', 'form_id': 'synthetic-form',
+                   'version': 'demo-1', 'idempotency_key': 'fictional-start-key-123'}
+        self.assertEqual(self.call('POST', '/api/v1/assessment-runs', request, csrf=False)[0], 403)
+        status, data = self.call('POST', '/api/v1/assessment-runs', request)
+        self.assertEqual(status, 200)
+        run_id = data['run']['id']
+        self.assertEqual(self.call('POST', '/api/v1/assessment-runs', request)[1]['run']['id'], run_id)
+        self.assertEqual(self.call('GET', '/api/v1/assessment-runs/' + run_id)[1]['items'][0]['id'], 'synthetic-item-1')
+        response = {'item_id': 'synthetic-item-1', 'response': 'fictional response',
+                    'assisted': False, 'narration': True, 'revision': 0,
+                    'idempotency_key': 'fictional-reply-key-123'}
+        malformed = dict(response, response='\ud800')
+        self.assertIn(self.call('POST', '/api/v1/assessment-runs/' + run_id + '/responses', malformed)[0], (400, 403))
+        status, data = self.call('POST', '/api/v1/assessment-runs/' + run_id + '/responses', response)
+        self.assertEqual(status, 200)
+        self.assertTrue(data['response']['assisted'])
+        self.assertEqual(data['response']['evidence_status'], 'needs_review')
+        resumed = self.call('GET', '/api/v1/assessment-runs/' + run_id)[1]
+        self.assertEqual((resumed['status'], resumed['revision']), ('active', 1))
+        self.assertEqual(self.call('GET', history_path)[1]['runs'][0]['mastery_status'], 'not_assessed')
+        self.assertEqual(self.call('GET', '/api/v1/students/synthetic-student-b/assessment-forms')[0], 403)
+        with self.app.store._connect() as db:
+            db.execute("UPDATE synthetic_assessment_forms SET status='suspended' WHERE form_id='synthetic-form'")
+        self.assertEqual(self.call('GET', '/api/v1/assessment-runs/' + run_id)[0], 403)
+        self.assertEqual(self.call('POST', '/api/v1/assessment-runs/' + run_id + '/complete',
+                                   {'revision': 1, 'idempotency_key': 'fictional-complete-key'})[0], 403)
+        self.assertEqual(self.call('GET', history_path)[0], 200)
+        trusted.set_synthetic_consent(token, 'synthetic-student-1', False)
+        self.assertEqual(self.call('GET', history_path)[0], 403)
+
     def test_interests_and_activity_require_authorized_profile_and_csrf(self):
         self.login()
         path = '/api/profiles/synthetic-student-1/interests'

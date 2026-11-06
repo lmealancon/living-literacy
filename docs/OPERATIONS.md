@@ -48,16 +48,24 @@ No automated backup schedule, retention policy, encrypted backup store, or teste
 
 ## Deployment and release blockers
 
-There is no configured staging deployment or public application in this package. Before hosting a service for real families, select and review managed identity, database, private object storage and infrastructure vendors; design and test isolation, encryption, monitoring, rate limits, backups, incident handling and rollback; complete legal and privacy reviews; and independently verify guardian authority and consent. Migrate to a reviewed production database design with transactional migrations and tenant isolation. The synthetic SQLite credentials and simulated reviewer identifiers cannot supply those controls.
+A restricted synthetic Render staging instance has been set up separately; it is not a production deployment and its free-tier filesystem is ephemeral. The local changes documented here are not necessarily deployed there. Before hosting a service for real families, select and review managed identity, database, private object storage and infrastructure vendors; design and test isolation, encryption, monitoring, rate limits, backups, incident handling and rollback; complete legal and privacy reviews; and independently verify guardian authority and consent. Migrate to a reviewed production database design with transactional migrations and tenant isolation. The synthetic SQLite credentials and simulated reviewer identifiers cannot supply those controls.
 
 Student-facing content requires qualified independent approval and licensed assets. Canonical skills and assessment thresholds remain unresolved. Paid tiers and provider integrations require reviewed terms and verified webhook handling before live charges. Follow `specs/RELEASE_GATES.md` and `docs/DECISION_REGISTER.md`; capture human approvals, test results, accessibility findings, backup/restore evidence, and unresolved risks. Never describe a synthetic prototype or an unverified deployment as production-ready.
 
 ## Synthetic SQLite migrations
 
-The explicit migration command supports only databases matching the known synthetic prototype schema. It does not upgrade older or unrecognized schemas or migrate PostgreSQL. Back up the stopped database first using the procedure above; then run:
+The explicit migration command supports the current synthetic prototype schema and an opt-in path for a specifically recognized v1.0 synthetic schema. It does not migrate arbitrary older, partial, or unrecognized schemas, or PostgreSQL. Back up the stopped database first using the procedure above; then run:
 
 ```sh
 python3 -m prototype.migrations --db /path/to/synthetic.sqlite3
 ```
 
-It records checksummed migration history and fails closed on mismatches or foreign-key violations. Its first migration adds indexes; it does not create or backfill guardian relationships, grants or consent. Re-running a successfully migrated database applies nothing. Restore the backup if needed; the tool does not provide automatic downgrades. A successful migration is not authorization for real student data.
+If the database was created by the original v1.0 prototype and does not yet have guardian-relationship or consent tables, opt into the separate upgrade explicitly:
+
+```sh
+python3 -m prototype.migrations --db /path/to/synthetic.sqlite3 --from-legacy-v1
+```
+
+The legacy upgrade accepts only the frozen known v1.0 table structures, optional matching v1 content tables, and no unexpected tables, views or triggers. It creates **empty** guardian-relationship and consent tables; legacy grants and tokens do not imply authority, so protected records remain inaccessible until a separately authorized migration or manual review is designed. Do not work around this deny-by-default behavior. It preserves existing students, lesson sessions, content and audit history, then adds the same indexes in one transaction. A partial schema, unrecognized object, or foreign-key error is rejected and rolled back. The opt-in is one-time: use the normal migration command after a successful upgrade.
+
+The tool records checksummed migration history and fails closed on mismatches or foreign-key violations. Its first migration adds indexes; it does not backfill guardian relationships, grants or consent. Re-running a successfully migrated database with the normal command applies nothing. Restore the backup if needed; the tool does not provide automatic downgrades. A successful migration is not authorization for real student data.

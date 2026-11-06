@@ -53,13 +53,13 @@ function clearLessonData() {
 }
 function clearProfileData() {
   state.history = []; clearLessonData();
-  for (const id of ['history', 'interests']) $(id).replaceChildren();
+  for (const id of ['history', 'interests', 'activity-summary']) $(id).replaceChildren();
   for (const id of ['stat-inprogress', 'stat-completed']) $(id).textContent = '—';
 }
 function clearProtectedData() {
   clearProfileData();
   state.profiles = []; state.lessons = []; state.profile = null;
-  for (const id of ['profiles', 'lesson-list']) $(id).replaceChildren();
+  for (const id of ['profiles', 'lesson-list', 'curriculum-domains']) $(id).replaceChildren();
   $('stat-profiles').textContent = '—';
   $('new-profile').value = ''; $('history-filter').value = 'all';
 }
@@ -123,7 +123,7 @@ async function loadDashboard() {
   $('stat-profiles').textContent = String(state.profiles.length);
   renderProfiles();
   renderLessons();
-  await Promise.all([loadHistory(), loadInterests()]);
+  await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains()]);
 }
 function renderProfiles() {
   const area = $('profiles');
@@ -139,7 +139,7 @@ function renderProfiles() {
       state.profile = profile.id;
       const stamp = snapshot();
       renderProfiles(); renderLessons();
-      try { await Promise.all([loadHistory(), loadInterests()]); } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
+      try { await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains()]); } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
     }));
     area.append(row);
   });
@@ -222,6 +222,61 @@ async function loadHistory() {
   $('stat-inprogress').textContent = String(state.history.filter(ongoing).length);
   $('stat-completed').textContent = String(state.history.filter(session => session.status === 'completed').length);
   renderHistory();
+}
+async function loadActivitySummary() {
+  const area = $('activity-summary');
+  area.replaceChildren();
+  if (!state.profile) {
+    area.append(el('p', 'Select a fictional profile to see activity.'));
+    return;
+  }
+  const selected = state.profile; const stamp = snapshot();
+  try {
+    const data = await request('/api/profiles/' + encodeURIComponent(selected) + '/activity');
+    if (!current(stamp)) return;
+    const values = [data.responses_total, data.responses_assisted, data.assistance_unrecorded];
+    if (!values.every(value => Number.isSafeInteger(value) && value >= 0)
+        || data.responses_assisted + data.assistance_unrecorded > data.responses_total) {
+      throw new Error('Activity summary is unavailable.');
+    }
+    const list = el('dl', undefined, 'activity-summary-list');
+    for (const [label, value] of [
+      ['Practice responses recorded', data.responses_total],
+      ['Responses with reported audio or modeling support', data.responses_assisted],
+      ['Responses with support not recorded', data.assistance_unrecorded]
+    ]) {
+      const item = el('div'); item.append(el('dt', label), el('dd', String(value))); list.append(item);
+    }
+    area.replaceChildren(list);
+  } catch (_) {
+    if (current(stamp)) area.replaceChildren(el('p', 'Activity summary is unavailable.'));
+  }
+}
+async function loadCurriculumDomains() {
+  const area = $('curriculum-domains');
+  area.replaceChildren();
+  const stamp = snapshot();
+  try {
+    const data = await request('/api/curriculum/domains');
+    if (!current(stamp)) return;
+    if (data.status !== 'candidate_counts_only' || data.canonical_skill_definitions_present !== false
+        || !Array.isArray(data.domains) || !data.domains.length
+        || data.domains.some(domain => !domain || typeof domain.name !== 'string' || !domain.name.trim()
+          || !['word_recognition', 'language_comprehension'].includes(domain.strand))) {
+      throw new Error('Curriculum areas are unavailable.');
+    }
+    const groups = el('div', undefined, 'curriculum-strands');
+    for (const [strand, title] of [['word_recognition', 'Word recognition'], ['language_comprehension', 'Language comprehension']]) {
+      const section = el('section'); section.append(el('h4', title));
+      const list = el('ul');
+      data.domains.filter(domain => domain.strand === strand).forEach(domain => list.append(el('li', domain.name)));
+      if (!list.children.length) throw new Error('Curriculum areas are unavailable.');
+      section.append(list); groups.append(section);
+    }
+    area.replaceChildren(groups);
+  } catch (_) {
+    if (current(stamp)) area.replaceChildren(el('p', 'Curriculum areas are unavailable.'));
+  }
 }
 function renderHistory() {
   const area = $('history');

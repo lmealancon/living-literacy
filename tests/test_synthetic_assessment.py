@@ -56,6 +56,20 @@ class SyntheticAssessmentTests(unittest.TestCase):
         with self.assertRaises(PolicyError):
             self.assessment.record_response(self.a, run['id'], 'synthetic-item', 'x', 'false', False)
 
+    def test_narration_is_recorded_as_assistance_even_if_unchecked(self):
+        self.assessment.set_synthetic_consent(self.a, 'synthetic-child-a', True)
+        run = self.start()
+        result = self.assessment.record_response(self.a, run['id'], 'synthetic-item', 'fictional', False, True)
+        self.assertTrue(result['assisted'])
+        self.assertTrue(self.assessment.results(self.a, run['id'])['responses'][0]['assisted'])
+
+    def test_invalid_unicode_response_rejected(self):
+        self.assessment.set_synthetic_consent(self.a, 'synthetic-child-a', True)
+        run = self.start()
+        with self.assertRaises(PolicyError):
+            self.assessment.record_response(self.a, run['id'], 'synthetic-item', 'invalid-\ud800', False, False)
+        self.assertEqual(self.assessment.results(self.a, run['id'])['responses'], [])
+
     def test_version_is_immutable_and_self_approval_rejected(self):
         with self.assertRaises(PolicyError):
             self.assessment.add_reviewed_fixture('synthetic-form', 'v1', 'en', [{'id': 'synthetic-i', 'prompt': 'x'}], 'synthetic-a', 'synthetic-b')

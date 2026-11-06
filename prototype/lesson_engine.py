@@ -46,6 +46,9 @@ class Session:
     responses: List[dict] = field(default_factory=list)
     audit: List[dict] = field(default_factory=list)
     mastery_status: str = "not_assessed"
+    # Any approved narration requested during this session is conservatively
+    # treated as assistance for subsequent responses. Old records default empty.
+    narration_exposures: List[dict] = field(default_factory=list)
 
 class LessonEngine:
     def __init__(self):
@@ -126,6 +129,10 @@ class LessonEngine:
             raise PolicyError("ASSISTANCE_PROVENANCE_REQUIRED")
         if not isinstance(response_text, str) or not response_text.strip():
             raise PolicyError("INVALID_RESPONSE")
+        assistance = dict(assistance)
+        if session.narration_exposures:
+            assistance["audio_or_modeling"] = True
+            assistance["narration_exposure"] = True
         eligible = bool(independent_task and session.stage_index == 4 and not assistance["audio_or_modeling"])
         session.responses.append({"stage": STAGES[session.stage_index], "response": response_text,
                                   "assistance": dict(assistance), "independent_evidence_eligible": eligible,

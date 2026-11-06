@@ -36,14 +36,41 @@ def _hash(value):
 
 
 def _fixture_id(value):
-    return isinstance(value, str) and value.startswith('synthetic-') and len(value) <= 100
+    return isinstance(value, str) and value.startswith('synthetic-') and 10 < len(value) <= 100
+
+
+def validate_synthetic_form(form):
+    """Validate fixture shape for both listing and delivery, not educational quality."""
+    if (not isinstance(form, dict) or set(form) != {'language', 'items'}
+            or form.get('language') not in ('en', 'es')
+            or not isinstance(form.get('items'), list) or not form['items']):
+        raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE')
+    ids = []
+    for item in form['items']:
+        if (not isinstance(item, dict) or set(item) != {'id', 'prompt'}
+                or not _fixture_id(item.get('id')) or not isinstance(item.get('prompt'), str)
+                or not item['prompt'].strip() or len(item['prompt']) > 1000):
+            raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE')
+        try:
+            item['id'].encode('utf-8')
+            item['prompt'].encode('utf-8')
+        except UnicodeError as exc:
+            raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE') from exc
+        ids.append(item['id'])
+    if len(ids) != len(set(ids)):
+        raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE')
+    return form
 
 
 class SyntheticAssessmentStore:
     def __init__(self, store):
         self.store = store
         with store._connect() as db:
-            db.executescript(SCHEMA)
+            # executescript implicitly commits a pending transaction; execute
+            # these fixed DDL statements individually so partial setup rolls back.
+            for statement in SCHEMA.split(';'):
+                if statement.strip():
+                    db.execute(statement)
 
     def add_reviewed_fixture(self, form_id, version, language, items, author, reviewer):
         """Trusted local fixture setup; does not constitute actual content review."""
@@ -57,6 +84,7 @@ class SyntheticAssessmentStore:
             raise PolicyError('INVALID_SYNTHETIC_ASSESSMENT_FIXTURE')
         if len({i['id'] for i in items}) != len(items):
             raise PolicyError('INVALID_SYNTHETIC_ASSESSMENT_FIXTURE')
+        validate_synthetic_form({'language': language, 'items': items})
         payload = json.dumps({'language': language, 'items': items}, sort_keys=True, ensure_ascii=False)
         with self.store._connect() as db:
             if db.execute('SELECT 1 FROM synthetic_assessment_forms WHERE form_id=? AND version=?', (form_id, version)).fetchone():
@@ -92,7 +120,10 @@ class SyntheticAssessmentStore:
             raise PolicyError('ASSESSMENT_UNAVAILABLE')
         if _hash(row[0]) != row[1] or (pinned is not None and row[1] != pinned):
             raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE')
-        return json.loads(row[0]), row[1]
+        try:
+            return validate_synthetic_form(json.loads(row[0])), row[1]
+        except (ValueError, TypeError) as exc:
+            raise PolicyError('ASSESSMENT_INTEGRITY_FAILURE') from exc
 
     def start(self, token, student_id, form_id, version):
         with self.store._connect() as db:
@@ -108,12 +139,28 @@ class SyntheticAssessmentStore:
         if (not isinstance(response, str) or not response.strip() or len(response) > 1000
                 or type(assisted) is not bool or type(narration) is not bool):
             raise PolicyError('INVALID_RESPONSE')
+        try:
+            response.encode('utf-8')
+            if not isinstance(item_id, str):
+                raise ValueError('Invalid item ID')
+            item_id.encode('utf-8')
+        except (UnicodeError, ValueError) as exc:
+            raise PolicyError('INVALID_RESPONSE') from exc
+        # Listening support is assistance, even if a caller incorrectly marks
+        # the response unassisted. This does not confer evidence or mastery.
+        assisted = assisted or narration
         with self.store._connect() as db:
             row = db.execute('SELECT student_id,form_id,version,digest FROM synthetic_assessment_runs WHERE id=?',
                              (run_id,)).fetchone()
             if not row:
                 raise PolicyError('RESOURCE_NOT_FOUND')
             actor = self._actor(db, token, row[0])
+            # Workflow-managed runs must not bypass version, state, audit and
+            # idempotency checks via the legacy response method. Older runs
+            # without workflow state retain their original behavior.
+            has_workflow = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='synthetic_assessment_workflow'").fetchone()
+            if has_workflow and db.execute('SELECT 1 FROM synthetic_assessment_workflow WHERE run_id=?', (run_id,)).fetchone():
+                raise PolicyError('ASSESSMENT_WORKFLOW_REQUIRED')
             form, _ = self._form(db, row[1], row[2], row[3])
             if item_id not in {item['id'] for item in form['items']}:
                 raise PolicyError('INVALID_ASSESSMENT_ITEM')

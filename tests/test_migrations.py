@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from prototype.lesson_engine import PolicyError
-from prototype.migrations import MigrationError, migrate
-from prototype.persistent_store import SyntheticSQLiteStore
+from prototype.migrations import MigrationError, migrate, _LEDGER, _normalized
+from prototype.persistent_store import SCHEMA, SyntheticSQLiteStore
 
 
 class MigrationTests(unittest.TestCase):
@@ -81,6 +81,41 @@ class MigrationTests(unittest.TestCase):
         with self.assertRaises(MigrationError):
             migrate(missing)
         self.assertFalse(missing.exists())
+
+    def test_unknown_ledger_trigger_cannot_mutate_existing_grants(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute(_LEDGER)
+            db.execute('CREATE TRIGGER hostile AFTER INSERT ON ll_schema_migrations BEGIN DELETE FROM grants; END')
+        with self.assertRaises(MigrationError):
+            migrate(self.path)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM grants').fetchone()[0], 1)
+            self.assertEqual(db.execute('SELECT count(*) FROM ll_schema_migrations').fetchone()[0], 0)
+
+    def test_schema_comparison_preserves_quoted_sql_literals(self):
+        self.assertEqual(_normalized("CHECK (kind = 'synthetic_family')"),
+                         _normalized("check(kind='synthetic_family')"))
+        self.assertNotEqual(_normalized("CHECK(kind='SYNTHETIC_FAMILY')"),
+                            _normalized("CHECK(kind='synthetic_family')"))
+        self.assertNotEqual(_normalized("CHECK(kind='synthetic family')"),
+                            _normalized("CHECK(kind='syntheticfamily')"))
+        self.assertNotEqual(_normalized("CHECK(kind='it''s A')"),
+                            _normalized("CHECK(kind='it''s a')"))
+
+    def test_changed_literal_in_database_schema_is_rejected_without_ledger(self):
+        path = Path(self.tmp.name) / 'changed-literal.sqlite3'
+        with sqlite3.connect(path) as db:
+            db.executescript(SCHEMA.replace("kind='synthetic_family'", "kind='SYNTHETIC_FAMILY'"))
+        with self.assertRaises(MigrationError):
+            migrate(path)
+        with sqlite3.connect(path) as db:
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='ll_schema_migrations'").fetchone())
+
+    def test_unknown_view_is_rejected(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute('CREATE VIEW unexpected AS SELECT id FROM students')
+        with self.assertRaises(MigrationError):
+            migrate(self.path)
 
 
 if __name__ == '__main__':

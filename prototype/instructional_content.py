@@ -7,9 +7,17 @@ CONTENT_PATH = Path(__file__).resolve().parent.parent / 'content' / 'SYNTHETIC_W
 
 def load_demo_lesson(path=CONTENT_PATH):
     data = json.loads(Path(path).read_text(encoding='utf-8'))
+    return validate_demo_lesson(data)
+
+def validate_demo_lesson(data):
+    """Validate an already decoded synthetic lesson using the existing rules."""
+    if not isinstance(data, dict):
+        raise PolicyError('INVALID_STAGE_CONTENT')
     if data.get('publication_status') != 'prototype_only':
         raise PolicyError('DEMO_CONTENT_STATUS_REQUIRED')
     stages = data.get('stages', [])
+    if not isinstance(stages, list) or any(not isinstance(stage, dict) for stage in stages):
+        raise PolicyError('INVALID_LESSON_STAGES')
     if [stage.get('id') for stage in stages] != list(STAGES):
         raise PolicyError('INVALID_LESSON_STAGES')
     if data.get('skill_ids') != []:

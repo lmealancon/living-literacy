@@ -6,6 +6,8 @@ Snapshots accept explicitly supplied *draft* records only. Caller-controlled
 review labels are simulation metadata, not verified reviewer identity.
 """
 import json
+import hashlib
+import hmac
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -18,6 +20,8 @@ _DOMAINS = {item['code']: item for item in json.loads(
     (_ROOT / 'registry' / 'DOMAIN_MANIFEST.json').read_text(encoding='utf-8'))['domains']}
 _ID = re.compile(r'^[A-Z]{2}-[0-9]{3}$')
 _VERSION = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+$')
+_SHA256 = re.compile(r'^[0-9a-f]{64}$')
+_EXPORT_FORMAT = 'living-literacy.synthetic-skill-snapshot'
 _REQUIRED = {'skill_id', 'version', 'domain_code', 'name', 'observable_behavior',
              'instructional_routine_id', 'status', 'prerequisite_skill_ids',
              'eligible_evidence', 'review'}
@@ -37,6 +41,14 @@ CREATE TABLE IF NOT EXISTS skill_snapshot_reviews (
 
 def _invalid():
     raise PolicyError('INVALID_SYNTHETIC_SKILL_SNAPSHOT')
+
+
+def _fixture_ref(value):
+    return isinstance(value, str) and value.startswith('synthetic-') and len(value) > len('synthetic-')
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
 
 
 def _validate(records):
@@ -79,6 +91,35 @@ def _validate(records):
     for node in graph: visit(node)
 
 
+def verify_snapshot_export(envelope):
+    """Validate and return an exported fictional snapshot without importing it.
+
+    Its checksum detects accidental changes, not a malicious rewrite or proof
+    of authorship. No review, educational approval or data access is implied.
+    """
+    if not isinstance(envelope, dict) or set(envelope) != {'payload', 'sha256'}:
+        _invalid()
+    payload, checksum = envelope['payload'], envelope['sha256']
+    if (not isinstance(checksum, str) or not _SHA256.fullmatch(checksum)
+            or not isinstance(payload, dict) or set(payload) != {'format', 'format_version', 'snapshot'}
+            or payload['format'] != _EXPORT_FORMAT or type(payload['format_version']) is not int
+            or payload['format_version'] != 1):
+        _invalid()
+    try:
+        encoded = _canonical(payload).encode('utf-8')
+    except (TypeError, ValueError, UnicodeError, RecursionError):
+        _invalid()
+    if not hmac.compare_digest(checksum, hashlib.sha256(encoded).hexdigest()):
+        _invalid()
+    snapshot = payload['snapshot']
+    if (not isinstance(snapshot, dict) or set(snapshot) != {'snapshot_id', 'source_ref', 'author_ref', 'records'}
+            or not all(_fixture_ref(snapshot[key]) for key in ('snapshot_id', 'source_ref', 'author_ref'))):
+        _invalid()
+    _validate(snapshot['records'])
+    # Return a deep copy: callers cannot change the verified envelope by alias.
+    return json.loads(_canonical(snapshot))
+
+
 class SyntheticSkillRegistry:
     """Persistence for fictional, self-contained inventory snapshots only.
 
@@ -104,10 +145,9 @@ class SyntheticSkillRegistry:
             db.close()
 
     def create_snapshot(self, snapshot_id, source_ref, author_ref, records):
-        if not all(isinstance(v, str) and v.startswith('synthetic-') and len(v) > len('synthetic-')
-                   for v in (snapshot_id, source_ref, author_ref)): _invalid()
+        if not all(_fixture_ref(v) for v in (snapshot_id, source_ref, author_ref)): _invalid()
         _validate(records)
-        payload = json.dumps(records, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+        payload = _canonical(records)
         try:
             with self._connect() as db:
                 db.execute('INSERT INTO skill_snapshots VALUES (?,?,?,?)', (snapshot_id, source_ref, author_ref, payload))
@@ -119,6 +159,44 @@ class SyntheticSkillRegistry:
             row = db.execute('SELECT source_ref,author_ref,records_json FROM skill_snapshots WHERE snapshot_id=?', (snapshot_id,)).fetchone()
         if row is None: raise PolicyError('RESOURCE_NOT_FOUND')
         return {'snapshot_id': snapshot_id, 'source_ref': row[0], 'author_ref': row[1], 'records': json.loads(row[2])}
+
+    def export_snapshot(self, snapshot_id):
+        """Export a validated, version-pinned fixture, without executing providers.
+
+        The content remains a draft. Separate simulated reviews are deliberately
+        excluded: their presence does not constitute instructional approval.
+        """
+        try:
+            snapshot = self.get_snapshot(snapshot_id)
+            payload = {'format': _EXPORT_FORMAT, 'format_version': 1, 'snapshot': snapshot}
+            envelope = {'payload': payload, 'sha256': hashlib.sha256(_canonical(payload).encode('utf-8')).hexdigest()}
+            verify_snapshot_export(envelope)
+            return envelope
+        except (ValueError, TypeError, UnicodeError, RecursionError) as exc:
+            raise PolicyError('INVALID_SYNTHETIC_SKILL_SNAPSHOT') from exc
+
+    def dependency_view(self, snapshot_id):
+        """Inspect only explicitly declared draft dependencies, with no gating.
+
+        Strand labels come from the supplied domain manifest. A cross-strand
+        edge identifies only the declaration; it imposes no strand-wide lock
+        and does not determine eligibility or make a recommendation.
+        """
+        snapshot = verify_snapshot_export(self.export_snapshot(snapshot_id))
+        by_id = {record['skill_id']: record for record in snapshot['records']}
+        items = []
+        for sid in sorted(by_id):
+            record = by_id[sid]
+            strand = _DOMAINS[record['domain_code']]['strand']
+            dependencies = []
+            for dep_id in sorted(record['prerequisite_skill_ids']):
+                dep_strand = _DOMAINS[by_id[dep_id]['domain_code']]['strand']
+                dependencies.append({'skill_id': dep_id, 'strand': dep_strand,
+                                     'cross_strand': dep_strand != strand})
+            items.append({'skill_id': sid, 'version': record['version'], 'status': record['status'],
+                          'strand': strand, 'declared_dependencies': dependencies})
+        return {'snapshot_id': snapshot['snapshot_id'], 'skills': items,
+                'note': 'Draft declarations only; no eligibility, mastery, or recommendation is inferred.'}
 
     def record_synthetic_review(self, snapshot_id, reviewer_ref, decision, note):
         if not isinstance(reviewer_ref, str) or not reviewer_ref.startswith('synthetic-') or len(reviewer_ref) <= len('synthetic-'): _invalid()
