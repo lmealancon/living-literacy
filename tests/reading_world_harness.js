@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup(withCanvas = true) {
+function setup(withCanvas = true, {navigate} = {}) {
   const gradient = {addColorStop(){}};
   const context = new Proxy({createLinearGradient:() => gradient}, {
     get(target, key) { return key in target ? target[key] : () => {}; },
@@ -24,7 +24,7 @@ function setup(withCanvas = true) {
   const window={};
   vm.runInNewContext(fs.readFileSync('prototype/web/reading-world.js','utf8'), {window,document,Math,Object,TypeError});
   const visits=[];
-  const controller=window.LivingReadingWorld.mount(root,{navigate:id=>visits.push(id)});
+  const controller=window.LivingReadingWorld.mount(root,{navigate:id=>{visits.push(id); return navigate?.(id);}});
   const find=predicate=>root.descendants().find(predicate);
   return {root,controller,visits,find};
 }
@@ -56,7 +56,49 @@ function setup(withCanvas = true) {
   const h=setup(false);
   assert(h.find(el=>el.tagName==='canvas').hidden,'failed canvas hides the map');
   assert.match(h.find(el=>el.attributes.role==='status').textContent,/unavailable/i);
+  assert.equal(h.find(el=>el.attributes['aria-label']==='Move up').disabled,true,'movement is disabled when the visual map is unavailable');
+  h.controller.pause(); h.controller.resume();
+  assert.equal(h.find(el=>el.attributes['aria-label']==='Move up').disabled,true,'resuming keeps unavailable movement disabled');
+  assert.match(h.find(el=>el.attributes.role==='status').textContent,/visual map is unavailable/i);
   h.find(el=>el.textContent==='Archive').events.click();
   assert.deepEqual(h.visits,['activities'],'text navigation remains available without a canvas');
 }
-console.log('Reading Garden interactions passed');
+async function testAsyncNavigationFeedback() {
+  let resolveFirst;
+  const first = new Promise(resolve=>{resolveFirst=resolve;});
+  const h=setup(false,{navigate:id=>id==='voice' ? first : Promise.resolve(true)});
+  const status=h.find(el=>el.attributes.role==='status');
+  h.find(el=>el.textContent==='Post Office').events.click();
+  assert.match(status.textContent,/Opening Post Office/,'pending requests do not claim a visit');
+  resolveFirst(false); await first; await Promise.resolve();
+  assert.match(status.textContent,/locked or unavailable/i,'rejected visits report the locked state');
+  h.find(el=>el.textContent==='Archive').events.click();
+  await Promise.resolve();
+  assert.match(status.textContent,/Visiting Archive/,'accepted async visits report the destination');
+
+  let resolveStale;
+  const stale=new Promise(resolve=>{resolveStale=resolve;});
+  const slow=setup(false,{navigate:id=>id==='voice' ? stale : Promise.resolve(true)});
+  const slowStatus=slow.find(el=>el.attributes.role==='status');
+  slow.find(el=>el.textContent==='Post Office').events.click();
+  slow.find(el=>el.textContent==='Archive').events.click();
+  await Promise.resolve();
+  assert.match(slowStatus.textContent,/Visiting Archive/);
+  resolveStale(false); await stale; await Promise.resolve();
+  assert.match(slowStatus.textContent,/Visiting Archive/,'an older response cannot overwrite the newer visit');
+
+  let resolveReset;
+  const resetPromise=new Promise(resolve=>{resolveReset=resolve;});
+  const reset=setup(false,{navigate:()=>resetPromise});
+  const resetStatus=reset.find(el=>el.attributes.role==='status');
+  reset.find(el=>el.textContent==='Post Office').events.click();
+  reset.controller.reset();
+  resolveReset(false); await resetPromise; await Promise.resolve();
+  assert.match(resetStatus.textContent,/visual map is unavailable/i,'reset invalidates a pending response without suggesting unavailable movement');
+
+  const failed=setup(false,{navigate:()=>Promise.reject(new Error('offline'))});
+  failed.find(el=>el.textContent==='Post Office').events.click();
+  await Promise.resolve(); await Promise.resolve();
+  assert.match(failed.find(el=>el.attributes.role==='status').textContent,/locked or unavailable/i);
+}
+testAsyncNavigationFeedback().then(()=>console.log('Reading Garden interactions passed')).catch(error=>{console.error(error);process.exitCode=1;});

@@ -368,11 +368,21 @@ async function loadDashboard() {
   if (!current(stamp)) return;
   state.profiles = profileData.profiles || [];
   state.lessons = lessonData.lessons || [];
-  if (!state.profiles.some(p => p.id === state.profile)) state.profile = state.profiles[0]?.id || null;
+  if (!state.profiles.some(p => p.id === state.profile)) {
+    const nextProfile = state.profiles[0]?.id || null;
+    if (state.profile !== nextProfile) {
+      // A revoked or removed profile must never leave its case state visible
+      // for the replacement; the epoch also invalidates late responses.
+      state.epoch++;
+      journey?.reset(); world3d?.reset();
+      state.profile = nextProfile;
+    }
+  }
   $('stat-profiles').textContent = String(state.profiles.length);
   renderProfiles();
   renderLessons();
-  await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains(), loadCompanionAIStatus()]);
+  await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains(), loadCompanionAIStatus(),
+    state.profile && journey && !journey.isLoadedFor(state.profile) ? journey.load(state.profile) : Promise.resolve()]);
 }
 function renderProfiles() {
   const area = $('profiles');
@@ -389,7 +399,9 @@ function renderProfiles() {
       state.profile = profile.id;
       const stamp = snapshot();
       renderProfiles(); renderLessons();
-      try { await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains()]); } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
+      try { await Promise.all([loadHistory(), loadInterests(), loadActivitySummary(), loadCurriculumDomains(),
+        journey && !journey.isLoadedFor(profile.id) ? journey.load(profile.id) : Promise.resolve()]); }
+      catch (error) { if (current(stamp)) message(friendlyError(error), true); }
     }));
     area.append(row);
   });
@@ -400,12 +412,14 @@ function renderLessons() {
   if (!state.profile) { area.append(el('p', 'Choose a fictional profile first.')); return; }
   if (!state.lessons.length) { area.append(el('p', 'No approved prototype activities are available.')); return; }
   state.lessons.forEach(lesson => {
-    let pendingKey = null;
+    let pendingKey = null, starting = false;
     const row = el('div', undefined, 'item activity-item');
     const icon = el('span', '✦', 'activity-icon'); icon.setAttribute('aria-hidden', 'true');
     const details = el('div');
     details.append(el('span', 'Reading journey', 'activity-kicker'), el('strong', lesson.title), el('p', 'Six stages · Prototype only', 'fine'));
     row.append(icon, details, button('Start', async () => {
+      if (starting) return;
+      starting = true;
       const stamp = snapshot();
       try {
         message('');
@@ -414,9 +428,17 @@ function renderLessons() {
         if (!current(stamp)) return;
         pendingKey = null;
         state.session = result.session;
+        const caseNeedsBinding = journey?.snapshot().step === 'lesson' && result.session.lesson_id === 'synthetic-lesson-word-study';
+        const bound = await journey?.bindSession(result.session, stamp.profile);
+        if (!current(stamp) || state.session !== result.session) return;
+        if (caseNeedsBinding && !bound) {
+          clearLessonData(); show('dashboard');
+          message('The activity could not be connected to the case. Reopen it from practice history or try again.', true);
+          return;
+        }
         await openSession();
-        if (current(stamp) && state.session === result.session) journey?.bindSession(result.session, stamp.profile);
       } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
+      finally { starting = false; }
     }, true));
     area.append(row);
   });
@@ -550,7 +572,18 @@ function renderHistory() {
         const data = await request('/api/sessions/' + encodeURIComponent(session.session_id));
         if (!current(stamp)) return;
         state.session = data.session;
+        const caseNeedsBinding = journey?.snapshot().step === 'lesson' && data.session.lesson_id === 'synthetic-lesson-word-study';
+        const bound = await journey?.bindSession(data.session, stamp.profile);
+        if (!current(stamp) || state.session !== data.session) return;
+        if (caseNeedsBinding && !bound) {
+          clearLessonData(); show('dashboard');
+          message('The activity could not be connected to the case. Please try again.', true);
+          return;
+        }
         await openSession();
+        if (current(stamp) && state.session === data.session) {
+          await journey?.observeSession(data.session);
+        }
       } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
     }));
     area.append(row);
@@ -568,14 +601,18 @@ async function openSession() {
     lesson = data.lesson;
   } catch (_) {
     if (current(stamp) && state.session === session) {
-      journey?.cancelBoundSession(); clearLessonData(); show('dashboard');
+      await journey?.cancelBoundSession();
+      if (!current(stamp) || state.session !== session) return;
+      clearLessonData(); show('dashboard');
       message('This activity is unavailable or has been withdrawn. Its history remains available.', true);
     }
     return;
   }
   if (!current(stamp) || state.session !== session) return;
   if (!lesson || !lesson.stages?.[session.stage_index]) {
-    journey?.cancelBoundSession(); clearLessonData(); show('dashboard');
+    await journey?.cancelBoundSession();
+    if (!current(stamp) || state.session !== session) return;
+    clearLessonData(); show('dashboard');
     message('This activity is unavailable or has been withdrawn. Its history remains available.', true);
     return;
   }
@@ -679,13 +716,20 @@ async function runAction(action, extra = {}) {
     const data = await request('/api/sessions/' + encodeURIComponent(session.session_id) + '/action', {action, revision: session.revision, ...extra});
     if (!current(stamp) || state.session !== session) return;
     state.session = data.session;
-    journey?.observeSession(data.session);
     await openSession();
     // Acknowledges a successful save or completion, not correctness or mastery.
-    if (current(stamp) && state.session === data.session && (action === 'respond' || action === 'complete')) {
-      setGuideMood('lesson-guide', 'celebrate');
+    if (current(stamp) && state.session === data.session) {
+      await journey?.observeSession(data.session);
+      if (current(stamp) && state.session === data.session && data.session.status === 'completed'
+          && journey?.snapshot().step === 'lesson' && journey.snapshot().feedback) {
+        $('session-status').textContent += ' ' + journey.snapshot().feedback;
+      }
+      if (current(stamp) && state.session === data.session && (action === 'respond'
+          || (action === 'complete' && !(journey?.snapshot().step === 'lesson' && journey.snapshot().feedback)))) {
+        setGuideMood('lesson-guide', 'celebrate');
+      }
     }
-  } catch (error) { if (current(stamp) && state.session === session) { journey?.cancelBoundSession(); clearLessonData(); show('dashboard'); message(friendlyError(error), true); } }
+  } catch (error) { if (current(stamp) && state.session === session) { await journey?.cancelBoundSession(); if (current(stamp) && state.session === session) { clearLessonData(); show('dashboard'); message(friendlyError(error), true); } } }
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -735,7 +779,7 @@ $('back').addEventListener('click', async () => {
   try {
     message(''); await loadDashboard();
     if (current(stamp) && journey) {
-      if (!journey.returnToWorld()) journey.cancelBoundSession();
+      if (!journey.returnToWorld()) await journey.cancelBoundSession();
       $('world3d-root')?.scrollIntoView?.({behavior: 'auto', block: 'start'});
     }
   }
@@ -743,7 +787,19 @@ $('back').addEventListener('click', async () => {
 });
 // World destinations navigate only to existing views. The server still
 // authorizes profiles, lesson content and every session operation.
-function navigateWorld(destination) {
+async function navigateWorld(destination, sessionId) {
+  if (destination === 'resume') {
+    if (!state.identity || !state.profile || typeof sessionId !== 'string' || !sessionId) return;
+    const stamp = snapshot();
+    try {
+      const data = await request('/api/sessions/' + encodeURIComponent(sessionId));
+      if (!current(stamp)) return;
+      state.session = data.session;
+      await openSession();
+      if (current(stamp) && state.session === data.session) await journey?.observeSession(data.session);
+    } catch (error) { if (current(stamp)) message(friendlyError(error), true); }
+    return;
+  }
   const targets = {signin: state.identity ? 'profiles-title' : 'login-title',
     activities: state.identity ? 'lesson-list-title' : 'login-title',
     voice: state.identity ? 'voice-demo-title' : 'login-title'};
@@ -755,8 +811,7 @@ function navigateWorld(destination) {
     target.focus?.({preventScroll: true});
   }
 }
-// Keep the fictional case tied to the selected signed-in demo profile. Case
-// state itself is temporary client-side game state, not an authorization gate.
+// Case writes are authorized by the server for the selected fictional profile.
 function visitCase(destination) {
   if (!state.identity || !state.profile) {
     message('Sign in and select a fictional profile to investigate this case.');
@@ -765,13 +820,22 @@ function visitCase(destination) {
   }
   return journey ? journey.visit(destination) : false;
 }
-if (typeof window.LivingJourney?.create === 'function' && typeof window.LivingWorld3DUI?.mount === 'function') {
-  journey = window.LivingJourney.create({navigate: navigateWorld, onChange: snapshot => world3d?.updateQuest(snapshot)});
+if (typeof window.LivingInvestigationClient?.create === 'function' && typeof window.LivingWorld3DUI?.mount === 'function') {
+  journey = window.LivingInvestigationClient.create({request, navigate: navigateWorld,
+    onChange: snapshot => world3d?.updateQuest(snapshot), onError: text => message(text, true)});
   world3d = window.LivingWorld3DUI.mount($('world3d-root'), {
     navigate: visitCase,
     onAnswer: (challengeId, choiceId, hintUsed) => {
       if (!state.identity || !state.profile) return false;
       return journey.attempt(challengeId, choiceId, hintUsed);
+    },
+    onHint: challengeId => {
+      if (!state.identity || !state.profile) return Promise.resolve(false);
+      return journey.hint(challengeId);
+    },
+    onRestart: () => {
+      if (!state.identity || !state.profile) return Promise.resolve(false);
+      return journey.restart();
     },
     onExit: () => navigateWorld('signin')
   });

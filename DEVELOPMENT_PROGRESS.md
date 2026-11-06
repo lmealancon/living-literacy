@@ -305,3 +305,65 @@ GPU, touch and screen-reader behavior remain unverified.
 Verification: `python3 -m unittest discover -s tests -q` passed 239 tests;
 JavaScript syntax checks and `git diff --check` passed. These include mocked
 browser, GPU, model and API components rather than real-device validation.
+
+## City wayfinding and graphics update
+
+The owner requested clearer building names and more detailed graphics.
+`prototype/web/world3d-signs.js` projects the Post Office, City Archive and
+Bookshop labels into the existing world; `world3d-ui.js` also gives text
+directions and retains accessible destination buttons and the no-WebGL fallback.
+`world3d-engine.js` adds original shopfront detail, warm directional lighting,
+distance haze, and a transparent sky over the previously generated city image.
+Static geometry is batched by color. No external game assets or libraries were
+added. The background is a fixed 2D image, and the world is still low-poly 3D.
+
+`tests/world3d_signs_harness.js`, the engine and HUD harnesses, the combined
+engine-and-signs harness, and the static asset test cover label projection,
+movement, resizing, fallback and lifecycle. The full local suite passed 241
+tests, JavaScript syntax and `git diff --check`
+passed; an instrumented mock measured 55 draw calls on the initial frame. This
+is not a real-device performance measurement. Real WebGL/GPU, touch, screen
+reader and browser visual testing remain unavailable in this environment. The
+source is local and has not been deployed. This does not complete the broader
+game, provide Fortnite-level visual fidelity, validate the instructional content,
+or enable live AI conversation on Render. Next bounded task: verify the scene
+and labels in real browsers and profile target devices before adding assets and
+further case content.
+
+## Investigation reliability and saved synthetic progress
+
+The owner requested that the investigation be finished to the best available
+standard. `prototype/investigation_store.py` and `investigation_schema.py` now
+store the fictional case per authorized synthetic identity and profile. The
+server checks the three fixed answers, records hint exposure before showing a
+hint, uses revision checks, rechecks consent and relationship, and validates the
+existing map lesson's version, content pin, and stored practice response before
+unlocking the final clue. The word “map” is a fictional game rule, not mastery.
+The async `investigation-client.js` and API routes support reload, retries,
+interrupted-lesson resume, authorization denial, profile separation and case
+restart. The current Render free-tier database is still ephemeral and loses all
+progress on restart or spin-down.
+
+`prototype/migrations.py` migration 2 creates the case table or adopts an exact
+pre-existing copy without replacing its rows; legacy conversion still creates
+no guardian authority or consent. See `docs/OPERATIONS.md` and
+`docs/INVESTIGATION_CASE.md` for backup, ledger and content-governance limits.
+The original case prompts remain unreviewed fixtures outside the content
+registry and cannot be individually withdrawn. Real child data is unsupported.
+
+The world HUD adds a keyboard-accessible case map, clearer challenge focus,
+a replay button, and a fixed scripted navigation companion (not generative AI).
+The scene now has a blue archive lantern, a decorative key and a closed box
+consistent with the clues. Original reading prompts were revised to avoid a
+spoiler and improve screen-reader wording. The separate offline review preview
+uses an in-memory simulator; it is not the deployed service.
+
+Automated tests cover schema upgrades/adoption and rollback, consent and
+cross-profile denial, concurrent revisions, hint persistence, lesson pin and
+withdrawal, case retry/resume/replay, stale account responses, map controls,
+and the offline preview. An in-process HTTP test also completes the case through
+the real lesson and case APIs. The complete local suite passed 268 tests, and
+JavaScript syntax and whitespace checks passed. Actual browser/GPU, touch,
+screen-reader and real-model tests were not available. The work remains local;
+the live conversational AI, independently reviewed K–8 content, durable hosting,
+real-user privacy/authorization and production release are not complete.

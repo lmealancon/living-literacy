@@ -30,6 +30,7 @@ from prototype.assessment_service import SyntheticAssessmentService
 from prototype.assessment_workflow import SyntheticAssessmentWorkflow
 from prototype.companion_ai import LocalAICompanion
 from prototype.companion_conversation import LocalSyntheticConversation
+from prototype.investigation_store import SyntheticInvestigationStore
 
 WEB = Path(__file__).parent / 'web'
 MAX_REQUEST = 4096
@@ -96,6 +97,7 @@ class App:
         self.family_insights = SyntheticFamilyInsights(self.store)
         self.assessment_service = SyntheticAssessmentService(self.store)
         self.assessment_workflow = SyntheticAssessmentWorkflow(self.store)
+        self.investigation = SyntheticInvestigationStore(self.store)
         # Prototype-only opt-in for in-process tests and future reviewed local
         # fixtures. The shipped CLI never enables this, and no audio is seeded.
         if type(synthetic_audio_enabled) is not bool:
@@ -189,7 +191,7 @@ def make_handler(app):
             if not self.valid_gateway() or not self.valid_host():
                 return self.send_body(403, {'error': 'Forbidden'})
             path = urlsplit(self.path).path
-            static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8'), '/hero-world.png': ('hero-world.png', 'image/png'), '/reading-world.js': ('reading-world.js', 'application/javascript; charset=utf-8'), '/reading-world.css': ('reading-world.css', 'text/css; charset=utf-8'), '/investigation-reading.js': ('investigation-reading.js', 'application/javascript; charset=utf-8'), '/world3d-engine.js': ('world3d-engine.js', 'application/javascript; charset=utf-8'), '/world3d-journey.js': ('world3d-journey.js', 'application/javascript; charset=utf-8'), '/world3d-ui.js': ('world3d-ui.js', 'application/javascript; charset=utf-8'), '/world3d.css': ('world3d.css', 'text/css; charset=utf-8')}
+            static = {'/': ('index.html', 'text/html; charset=utf-8'), '/index.html': ('index.html', 'text/html; charset=utf-8'), '/styles.css': ('styles.css', 'text/css; charset=utf-8'), '/app.js': ('app.js', 'application/javascript; charset=utf-8'), '/hero-world.png': ('hero-world.png', 'image/png'), '/reading-world.js': ('reading-world.js', 'application/javascript; charset=utf-8'), '/reading-world.css': ('reading-world.css', 'text/css; charset=utf-8'), '/investigation-reading.js': ('investigation-reading.js', 'application/javascript; charset=utf-8'), '/investigation-client.js': ('investigation-client.js', 'application/javascript; charset=utf-8'), '/world3d-engine.js': ('world3d-engine.js', 'application/javascript; charset=utf-8'), '/world3d-journey.js': ('world3d-journey.js', 'application/javascript; charset=utf-8'), '/world3d-signs.js': ('world3d-signs.js', 'application/javascript; charset=utf-8'), '/world3d-ui.js': ('world3d-ui.js', 'application/javascript; charset=utf-8'), '/world3d.css': ('world3d.css', 'text/css; charset=utf-8')}
             if path in static:
                 name, mime = static[path]
                 return self.send_body(200, (WEB / name).read_bytes(), mime)
@@ -217,6 +219,8 @@ def make_handler(app):
                     return self.send_body(200, app.family_insights.get_interests(token, unquote(parts[2])))
                 if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'activity':
                     return self.send_body(200, app.family_insights.activity_summary(token, unquote(parts[2])))
+                if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'investigation':
+                    return self.send_body(200, {'case': app.investigation.get(token, unquote(parts[2]))})
                 if len(parts) == 4 and parts[:2] == ['api', 'lessons']:
                     lesson = app.store.content_for_demo(unquote(parts[2]), unquote(parts[3]))
                     return self.send_body(200, {'lesson': lesson})
@@ -298,6 +302,27 @@ def make_handler(app):
                 if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'interests':
                     result = app.family_insights.set_interests(token, unquote(parts[2]), data['interests'])
                     return self.send_body(200, result)
+                if len(parts) == 4 and parts[:2] == ['api', 'profiles'] and parts[3] == 'investigation':
+                    student = unquote(parts[2])
+                    action = data.get('action')
+                    keys = {'visit': {'action', 'revision', 'destination'},
+                            'answer': {'action', 'revision', 'challenge', 'choice', 'hint_used'},
+                            'hint': {'action', 'revision', 'challenge'},
+                            'bind': {'action', 'revision', 'session_id'},
+                            'finish': {'action', 'revision'},
+                            'cancel': {'action', 'revision'},
+                            'reset': {'action', 'revision'}}
+                    if not isinstance(action, str) or action not in keys or set(data) != keys[action]:
+                        raise ValueError('Invalid investigation request')
+                    revision = data['revision']
+                    if action == 'visit': result = app.investigation.visit(token, student, revision, data['destination'])
+                    elif action == 'answer': result = app.investigation.answer(token, student, revision, data['challenge'], data['choice'], data['hint_used'])
+                    elif action == 'hint': result = app.investigation.hint(token, student, revision, data['challenge'])
+                    elif action == 'bind': result = app.investigation.bind_lesson(token, student, revision, data['session_id'])
+                    elif action == 'finish': result = app.investigation.finish_lesson(token, student, revision)
+                    elif action == 'cancel': result = app.investigation.cancel_lesson(token, student, revision)
+                    else: result = app.investigation.reset(token, student, revision)
+                    return self.send_body(200, {'case': result})
                 if len(parts) == 4 and parts[:2] == ['api', 'sessions'] and parts[3] == 'narration':
                     # No fixture installation or simulated-review API is exposed.
                     # This route remains unavailable in all shipped CLI modes.

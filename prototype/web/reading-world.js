@@ -20,8 +20,8 @@
   function mount(root, options = {}) {
     if (!root || typeof root.replaceChildren !== 'function') throw new TypeError('A world container is required.');
     const navigate = typeof options.navigate === 'function' ? options.navigate : () => {};
-    let x = 0.49, y = 0.78, active = true, destroyed = false, background = null;
-    const buttons = [];
+    let x = 0.49, y = 0.78, active = true, destroyed = false, background = null, navigationGeneration = 0;
+    const buttons = [], movementButtons = [];
     const section = node('section', 'reading-world');
     section.setAttribute('aria-labelledby', 'reading-world-title');
     const intro = node('div', 'reading-world-intro');
@@ -49,11 +49,11 @@
       const button = node('button', 'reading-world-direction', symbol);
       button.type = 'button'; button.setAttribute('aria-label', 'Move ' + label.toLowerCase());
       button.addEventListener('click', () => move(dx,dy));
-      buttons.push(button); directions.append(button);
+      buttons.push(button); movementButtons.push(button); directions.append(button);
     }
     const explore = node('button', 'reading-world-explore', 'Explore nearby');
     explore.type = 'button'; explore.addEventListener('click', visitNearby);
-    buttons.push(explore); controls.append(directions, explore);
+    buttons.push(explore); movementButtons.push(explore); controls.append(directions, explore);
     const destinationList = node('div', 'reading-world-destinations');
     destinationList.setAttribute('aria-label', 'Choose a destination');
     for (const destination of DESTINATIONS) {
@@ -69,6 +69,7 @@
     if (!ctx) {
       canvas.hidden = true;
       status.textContent = 'The visual map is unavailable. Choose a destination below.';
+      for (const button of movementButtons) button.disabled = true;
     }
 
     function nearest() {
@@ -134,17 +135,26 @@
       ctx.restore();
     }
     function move(dx, dy) {
-      if (!active || destroyed) return;
+      if (!active || destroyed || !ctx) return;
       x = clamp(x + dx*STEP); y = Math.max(.12, Math.min(.91, y + dy*STEP));
       paint(); announce();
     }
     function visit(destination) {
       if (!active || destroyed) return;
       x = destination.x; y = destination.y; paint();
-      const accepted = navigate(destination.id);
-      status.textContent = accepted === false
-        ? 'That location is locked. Follow the current clue or sign in.'
-        : 'Visiting ' + destination.name + '.';
+      const generation = ++navigationGeneration;
+      status.textContent = 'Opening ' + destination.name + '…';
+      const settle = accepted => {
+        if (destroyed || !active || generation !== navigationGeneration) return;
+        status.textContent = accepted === false
+          ? 'That location is locked or unavailable. Follow the current clue or sign in.'
+          : 'Visiting ' + destination.name + '.';
+      };
+      try {
+        const accepted = navigate(destination.id);
+        if (accepted && typeof accepted.then === 'function') accepted.then(settle, () => settle(false));
+        else settle(accepted);
+      } catch (_) { settle(false); }
     }
     function visitNearby() {
       if (!active || destroyed) return;
@@ -176,10 +186,10 @@
     }
     paint();
     return {
-      pause() { active = false; for (const button of buttons) button.disabled = true; },
-      resume() { if (!destroyed) { active = true; for (const button of buttons) button.disabled = false; paint(); } },
-      reset() { if (!destroyed) { x=.49; y=.78; paint(); status.textContent='Choose a direction to begin exploring.'; } },
-      destroy() { active = false; destroyed = true; root.replaceChildren(); }
+      pause() { active = false; navigationGeneration++; for (const button of buttons) button.disabled = true; },
+      resume() { if (!destroyed) { active = true; for (const button of buttons) button.disabled = false; if (!ctx) for (const button of movementButtons) button.disabled = true; paint(); if (ctx) announce(); else status.textContent='The visual map is unavailable. Choose a destination below.'; } },
+      reset() { if (!destroyed) { navigationGeneration++; x=.49; y=.78; paint(); status.textContent=ctx?'Choose a direction to begin exploring.':'The visual map is unavailable. Choose a destination below.'; } },
+      destroy() { active = false; destroyed = true; navigationGeneration++; root.replaceChildren(); }
     };
   }
   global.LivingReadingWorld = Object.freeze({mount});

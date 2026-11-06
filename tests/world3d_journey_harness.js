@@ -59,7 +59,7 @@ assert.equal(journey.returnToWorld(), false);
 assert.equal(journey.visit('signin'), false, 'bookshop remains locked during the lesson');
 assert.equal(journey.observeSession({...completed,responses:[],revision:2}), true);
 assert.equal(journey.snapshot().phase, 'activity_requested', 'completing without practice requires a retry');
-assert.match(journey.snapshot().message, /No practice response/);
+assert.match(journey.snapshot().message, /map practice response/i);
 assert.equal(journey.returnToWorld(), false);
 assert.equal(journey.bindSession({...base,session_id:'retry'}, base.student_id), true);
 assert.equal(journey.observeSession({...completed,session_id:'retry',responses:[{stage:'practice',response:'   '}]}), true);

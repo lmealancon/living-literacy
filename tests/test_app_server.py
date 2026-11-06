@@ -67,7 +67,9 @@ class AppServerTests(unittest.TestCase):
                                ('/reading-world.css', 'text/css; charset=utf-8'),
                                ('/world3d-engine.js', 'application/javascript; charset=utf-8'),
                                ('/world3d-journey.js', 'application/javascript; charset=utf-8'),
+                               ('/world3d-signs.js', 'application/javascript; charset=utf-8'),
                                ('/investigation-reading.js', 'application/javascript; charset=utf-8'),
+                               ('/investigation-client.js', 'application/javascript; charset=utf-8'),
                                ('/world3d-ui.js', 'application/javascript; charset=utf-8'),
                                ('/world3d.css', 'text/css; charset=utf-8')]:
             with self.subTest(path=path):
@@ -123,6 +125,74 @@ class AppServerTests(unittest.TestCase):
         self.assertEqual(data['status'], 'candidate_counts_only')
         self.assertFalse(data['canonical_skill_definitions_present'])
         self.assertEqual(len(data['domains']), 12)
+
+    def test_investigation_api_is_authorized_csrf_protected_and_ordered(self):
+        path = '/api/profiles/synthetic-student-1/investigation'
+        self.assertEqual(self.call('GET', path)[0], 403)
+        self.login()
+        status, data = self.call('GET', path)
+        self.assertEqual((status, data['case']['step'], data['case']['revision']), (200, 'post_office', 0))
+        visit = {'action': 'visit', 'revision': 0, 'destination': 'voice'}
+        self.assertEqual(self.call('POST', path, visit, csrf=False)[0], 403)
+        self.assertEqual(self.call('POST', path, dict(visit, free_text='do not store'))[0], 400)
+        self.assertEqual(self.call('POST', path, dict(visit, destination='signin'))[0], 403)
+        self.assertEqual(self.call('GET', '/api/profiles/synthetic-student-b/investigation')[0], 403)
+        status, data = self.call('POST', path, visit)
+        self.assertEqual((status, data['case']['step']), (200, 'decode'))
+        self.assertEqual(self.call('POST', path, visit)[0], 409)
+        hint = {'action':'hint', 'revision':data['case']['revision'], 'challenge':'decode'}
+        self.assertEqual(self.call('POST', path, hint, csrf=False)[0], 403)
+        status, data = self.call('POST', path, hint)
+        self.assertEqual((status, data['case']['pendingHint']), (200, True))
+        self.assertTrue(self.call('GET', path)[1]['case']['pendingHint'])
+        answer = {'action':'answer', 'revision':data['case']['revision'],
+                  'challenge':'decode', 'choice':'a', 'hint_used':False}
+        status, data = self.call('POST', path, answer)
+        self.assertEqual((status, data['case']['step']), (200, 'archive'))
+        self.assertTrue(data['case']['clues'][0]['usedHint'])
+        self.assertEqual(self.call('GET', path)[1]['case']['step'], 'archive')
+        token = self.cookie.split('=', 1)[1]
+        self.app.store.withdraw_synthetic_consent(token, 'synthetic-student-1', 'lesson')
+        self.assertEqual(self.call('GET', path)[0], 403)
+        self.assertEqual(self.call('POST', path, {'action':'visit', 'revision':data['case']['revision'], 'destination':'activities'})[0], 403)
+
+    def test_investigation_api_completes_case_through_real_lesson(self):
+        self.login()
+        path = '/api/profiles/synthetic-student-1/investigation'
+        case = self.call('GET', path)[1]['case']
+        def case_action(action, **fields):
+            nonlocal case
+            status, body = self.call('POST', path, {'action':action, 'revision':case['revision'], **fields})
+            self.assertEqual(status, 200, body)
+            case = body['case']
+        case_action('visit', destination='voice')
+        case_action('answer', challenge='decode', choice='a', hint_used=False)
+        case_action('visit', destination='activities')
+        case_action('answer', challenge='context', choice='b', hint_used=False)
+        self.assertEqual(case['step'], 'lesson')
+        status, body = self.call('POST', '/api/sessions', {
+            'student_id':'synthetic-student-1', 'lesson_id':'synthetic-lesson-word-study',
+            'version':'demo-1', 'idempotency_key':'synthetic-full-case-key-123'})
+        self.assertEqual(status, 201)
+        session = body['session']
+        case_action('bind', session_id=session['session_id'])
+        session_path = '/api/sessions/' + session['session_id'] + '/action'
+        def lesson_action(action, **fields):
+            nonlocal session
+            status, body = self.call('POST', session_path, {'action':action, 'revision':session['revision'], **fields})
+            self.assertEqual(status, 200, body)
+            session = body['session']
+        lesson_action('activate')
+        for _ in range(3): lesson_action('next')
+        lesson_action('respond', response='map', assisted=False)
+        for _ in range(2): lesson_action('next')
+        lesson_action('complete')
+        case_action('finish')
+        self.assertEqual(case['step'], 'bookshop')
+        case_action('visit', destination='signin')
+        case_action('answer', challenge='sequence', choice='c', hint_used=False)
+        self.assertEqual(case['phase'], 'case_solved')
+        self.assertEqual(len(self.call('GET', path)[1]['case']['clues']), 3)
 
     def test_companion_demo_is_authenticated_and_disabled_by_default(self):
         self.assertEqual(self.call('GET', '/api/companion/status')[0], 403)

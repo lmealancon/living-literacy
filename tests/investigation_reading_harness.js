@@ -17,6 +17,15 @@ for (const item of all) {
   assert.equal(item.options.length, 3);
   assert.equal(new Set(Array.from(item.options, option => option.id)).size, 3);
 }
+// The mystery's ending should not appear in the teaching passage or answer
+// choices before the final question is solved.
+const finalTask = reading.get('sequence');
+assert.doesNotMatch(finalTask.passage, /storybook/i);
+for (const option of finalTask.options) assert.doesNotMatch(option.label, /storybook/i);
+assert.match(reading.evaluate('sequence', 'c', false).clue_text, /storybook/i);
+// Plain-letter descriptions avoid slash notation that screen readers may
+// announce as punctuation rather than as sounds.
+assert.doesNotMatch(reading.get('decode').teaching, /\//);
 // Wrong answers do not reveal the next clue and a learner can retry.
 for (const [id, correct, wrong, clue] of [
   ['decode', 'a', 'b', 'clue-decode'],

@@ -9,10 +9,22 @@
 .world3d button:focus-visible,.world3d-canvas:focus-visible {outline:3px solid #174db4;outline-offset:3px}
 .world3d button:disabled {opacity:.5;cursor:default}
 .world3d-exit {padding:.7rem .9rem}
-.world3d-stage {position:relative;overflow:hidden;min-height:14rem;border:3px solid #fff;border-radius:20px;background:linear-gradient(#b7e3ff,#ecf5d6 62%,#91c97a);box-shadow:0 8px 22px #18493624}
+.world3d-stage {position:relative;overflow:hidden;min-height:14rem;border:3px solid #fff;border-radius:20px;background-color:#b7dced;background-image:linear-gradient(#b7e3ff1c,#f1e8ca16),url('hero-world.png');background-position:center top;background-size:cover;box-shadow:0 8px 22px #18493624}
 .world3d-stage[hidden] {display:none}
 .world3d-canvas {display:block;width:100%;height:auto;aspect-ratio:16/9;outline-offset:-5px;touch-action:manipulation}
 .world3d-canvas[hidden] {display:none}
+.world3d-sign-layer {position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2}
+.world3d-sign {position:absolute;transform:translate(-50%,-100%);white-space:nowrap;pointer-events:none;padding:.38rem .65rem;border:2px solid #f8dfa4;border-radius:.6rem;background:#21384a;color:#fff;font:800 clamp(.68rem,1.25vw,.92rem)/1.2 system-ui,sans-serif;box-shadow:0 3px 12px #13263280;text-shadow:0 1px 2px #0009}
+.world3d-sign[hidden] {display:none}
+.world3d-map {display:grid;gap:.45rem;margin-top:1rem;max-width:32rem;padding:.85rem;border:1px solid #c9b28c;border-radius:16px;background:#fff9ea}
+.world3d-map[hidden] {display:none}
+.world3d-map-title {margin:0;color:#263f59;font:800 1rem/1.3 Georgia,serif}
+.world3d-map-area {position:relative;min-height:11rem;overflow:hidden;border:1px solid #cbb68e;border-radius:12px;background:linear-gradient(90deg,transparent 41%,#dfd0ab 41%,#dfd0ab 59%,transparent 59%),linear-gradient(0deg,transparent 58%,#dfd0ab 58%,#dfd0ab 74%,transparent 74%),#f4ead4}
+.world3d .world3d-map-location {position:absolute;transform:translate(-50%,-50%);min-width:44px;min-height:44px;padding:0;border:2px solid #fff;background:#315a7b;color:#fff;font-size:1rem;box-shadow:0 2px 7px #182c3d55}
+.world3d .world3d-map-location:hover:not(:disabled) {background:#24455f;color:#fff}
+.world3d .world3d-map-location:disabled {opacity:.55;cursor:default}
+.world3d-map-player {position:absolute;z-index:2;transform:translate(-50%,-50%);pointer-events:none;padding:.25rem .4rem;border:2px solid #fff;border-radius:99px;background:#8b5121;color:#fff;font:800 .72rem/1 system-ui,sans-serif;box-shadow:0 2px 6px #30210d77}
+.world3d-map-legend {margin:0;color:#40535c;font-size:.85rem;line-height:1.4}
 .world3d-quest {display:grid;gap:.5rem;margin-top:1rem;padding:1.1rem 1.25rem;border:1px solid #dbc6a1;border-left:5px solid #bc8036;border-radius:14px;background:#fffdf5;box-shadow:0 3px 12px #7352250c}
 .world3d-quest-title {margin:0;color:#263f59;font:800 1.2rem/1.3 Georgia,serif}
 .world3d-quest-message {margin:0;color:#354b5b;line-height:1.5}
@@ -21,6 +33,8 @@
 .world3d-clues {display:grid;gap:.5rem;margin:0;padding-left:1.35rem;color:#3d4e53}
 .world3d-clue {padding:.3rem 0}.world3d-clue strong {color:#253e57}.world3d-clue p {margin:.2rem 0 0;line-height:1.5}.world3d-clue-empty {color:#65767d;font-style:italic}
 .world3d-clue-hint {display:inline-block;margin-left:.55rem;padding:.18rem .45rem;border-radius:99px;background:#f2e4c7;color:#654c2e;font:700 .72rem/1.3 system-ui,sans-serif}
+.world3d-guide {display:grid;gap:.4rem;margin-top:1rem;padding:1rem 1.2rem;border:1px solid #bdcfc4;border-radius:16px;background:#edf7ee;color:#284c42}
+.world3d-guide-title {margin:0;color:#245346;font:800 1.05rem/1.3 system-ui,sans-serif}.world3d-guide-note {margin:0;color:#4c7164;font-size:.78rem}.world3d-guide-reply {min-height:1.5em;margin:.15rem 0;line-height:1.5}.world3d-guide-actions {display:flex;gap:.5rem;flex-wrap:wrap}.world3d .world3d-guide-actions button {padding:.6rem .85rem;font-size:.9rem}
 .world3d-challenge {display:grid;gap:.65rem;margin-top:1rem;padding:clamp(1rem,2.6vw,1.5rem);border:2px solid #d4b581;border-radius:18px;background:#fffaf0;box-shadow:0 8px 25px #73522512}
 .world3d-challenge[hidden] {display:none}.world3d-challenge-label {margin:0;color:#825327;font:800 .7rem/1.3 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
 .world3d-challenge-title {margin:0;color:#233c58;font:800 clamp(1.2rem,2.5vw,1.6rem)/1.2 Georgia,serif}.world3d-challenge-teaching,.world3d-challenge-prompt {margin:0;color:#334a59;line-height:1.55}.world3d-challenge-prompt {font-weight:800}
@@ -28,6 +42,7 @@
 .world3d-challenge-answers {display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.55rem}.world3d .world3d-answer {padding:.75rem;text-align:left;border-color:#c3b28f;background:#fff;color:#263e50}.world3d .world3d-answer:hover:not(:disabled){background:#f7edda}
 .world3d .world3d-hint {justify-self:start;padding:.55rem .85rem;border-color:#c7b79b;background:#fff9ea;color:#604b32}.world3d-hint-text {margin:0;padding:.65rem .8rem;border-radius:10px;background:#fff1c9;color:#58471f}.world3d-hint-text[hidden] {display:none}.world3d-feedback {min-height:1.3em;margin:0;color:#345d4a;font-weight:750;line-height:1.45}
 .world3d-status {margin:1rem 0 .35rem;min-height:1.5em;color:#275143;font-weight:700;line-height:1.4}
+.world3d-wayfinding {margin:.25rem 0 .65rem;color:#2d4960;font-size:.95rem;line-height:1.45}
 .world3d-instructions {margin:.3rem 0 1rem;color:#526961;font-size:.9rem;line-height:1.5}
 .world3d-legend {margin:-.5rem 0 1rem;color:#3e5b51;font-size:.88rem;line-height:1.45}
 .world3d-controls,.world3d-movement,.world3d-destinations {display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
@@ -37,6 +52,6 @@
 .world3d .world3d-interact {padding:.7rem 1rem;border-color:#215f50;background:#286d59;color:#fff}
 .world3d .world3d-interact:hover:not(:disabled) {background:#1b5142}
 .world3d .world3d-destination {padding:.68rem .9rem;background:#f9fffa}
-html[data-visuals="simple"] .world3d-stage,html[data-visuals="simple"] .world3d-controls,html[data-visuals="simple"] .world3d-instructions {display:none}
+html[data-visuals="simple"] .world3d-stage,html[data-visuals="simple"] .world3d-map,html[data-visuals="simple"] .world3d-controls,html[data-visuals="simple"] .world3d-instructions {display:none}
 @media(max-width:600px) {.world3d {padding:1rem;margin:1rem 0}.world3d-header{align-items:flex-start}.world3d-stage{min-height:10rem}.world3d-controls{gap:.7rem}.world3d-movement{width:100%}.world3d-destinations{display:grid;grid-template-columns:1fr}.world3d .world3d-destination{text-align:left}}
 @media(prefers-reduced-motion:reduce) {.world3d *, .world3d *::before, .world3d *::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}}

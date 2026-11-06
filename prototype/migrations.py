@@ -10,6 +10,7 @@ import sqlite3
 from pathlib import Path
 
 from prototype.persistent_store import SCHEMA
+from prototype.investigation_schema import CASE_PROGRESS_CREATE_SQL, CASE_PROGRESS_TABLE
 
 
 class MigrationError(Exception):
@@ -22,6 +23,7 @@ _MIGRATIONS = (
         'CREATE INDEX ll_idx_sessions_student ON sessions(student_id)',
         'CREATE INDEX ll_idx_audit_events_session ON audit_events(session_id)',
     )),
+    (2, 'Add synthetic investigation progress', (CASE_PROGRESS_CREATE_SQL,)),
 )
 _LEDGER = '''CREATE TABLE ll_schema_migrations (
     version INTEGER PRIMARY KEY,
@@ -136,16 +138,30 @@ def _check_baseline(db):
 
 
 def _check_migration_objects(db, migrations):
-    # Each migrated index is immutable. A ledger alone does not prove that its
-    # expected index is still present with the right definition.
+    # A ledger alone does not prove that expected objects remain unchanged.
     for _, _, statements in migrations:
         for statement in statements:
             words = statement.split()
-            if len(words) < 3 or words[:2] != ['CREATE', 'INDEX']:
+            if len(words) >= 3 and words[:2] == ['CREATE', 'INDEX']:
+                object_type, name = 'index', words[2]
+            elif _normalized(statement) == _normalized(CASE_PROGRESS_CREATE_SQL):
+                object_type, name = 'table', CASE_PROGRESS_TABLE
+            else:
                 raise MigrationError('Unsupported migration object')
-            row = db.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name=?", (words[2],)).fetchone()
+            row = db.execute('SELECT sql FROM sqlite_master WHERE type=? AND name=?', (object_type, name)).fetchone()
             if not row or _normalized(row[0]) != _normalized(statement):
-                raise MigrationError('Migration index missing or changed: ' + words[2])
+                raise MigrationError('Migration object missing or changed: ' + name)
+
+
+def _apply_statement(db, statement):
+    """Adopt only the exact pre-ledger case table; never replace its records."""
+    if _normalized(statement) == _normalized(CASE_PROGRESS_CREATE_SQL):
+        existing = db.execute('SELECT type,sql FROM sqlite_master WHERE name=?', (CASE_PROGRESS_TABLE,)).fetchone()
+        if existing:
+            if existing[0] != 'table' or _normalized(existing[1]) != _normalized(statement):
+                raise MigrationError('Unrecognized existing investigation schema')
+            return
+    db.execute(statement)
 
 
 def _migrate_open_database(filename, legacy_v1):
@@ -182,7 +198,7 @@ def _migrate_open_database(filename, legacy_v1):
         newly_applied = []
         for version, description, statements in _MIGRATIONS[len(applied):]:
             for statement in statements:
-                db.execute(statement)
+                _apply_statement(db, statement)
             db.execute('INSERT INTO ll_schema_migrations(version, description, checksum) VALUES (?,?,?)',
                        (version, description, _checksum(statements)))
             newly_applied.append(version)

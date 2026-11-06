@@ -40,7 +40,7 @@ class LegacyV1MigrationTests(unittest.TestCase):
     def test_explicit_upgrade_preserves_records_but_never_infers_authority(self):
         with self.assertRaises(MigrationError):
             migrate(self.path)
-        self.assertEqual(upgrade_legacy_v1(self.path), [1])
+        self.assertEqual(upgrade_legacy_v1(self.path), [1, 2])
         self.assertEqual(migrate(self.path), [])
         with sqlite3.connect(self.path) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM students').fetchone()[0], 1)
@@ -96,7 +96,7 @@ class LegacyV1MigrationTests(unittest.TestCase):
         with sqlite3.connect(self.path) as db:
             original_record = db.execute('SELECT * FROM content_versions').fetchall()
             original_events = db.execute('SELECT * FROM content_events').fetchall()
-        self.assertEqual(upgrade_legacy_v1(self.path), [1])
+        self.assertEqual(upgrade_legacy_v1(self.path), [1, 2])
         with sqlite3.connect(self.path) as db:
             self.assertEqual(db.execute('SELECT * FROM content_versions').fetchall(), original_record)
             self.assertEqual(db.execute('SELECT * FROM content_events').fetchall(), original_events)
@@ -115,7 +115,7 @@ class LegacyV1MigrationTests(unittest.TestCase):
             self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='guardian_relationships'").fetchone())
         accepted = subprocess.run(command + ['--from-legacy-v1'], cwd=project, capture_output=True, text=True)
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
-        self.assertIn('Applied migrations: 1', accepted.stdout)
+        self.assertIn('Applied migrations: 1, 2', accepted.stdout)
         self.assertEqual(migrate(self.path), [])
 
 

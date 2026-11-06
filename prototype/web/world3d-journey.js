@@ -30,7 +30,7 @@
   function hasPracticeResponse(session) {
     return Array.isArray(session.responses) && session.responses.some(item =>
       item && typeof item === 'object' && item.stage === 'practice'
-        && typeof item.response === 'string' && item.response.trim().length > 0);
+        && typeof item.response === 'string' && item.response.trim().toLowerCase() === 'map');
   }
 
   function create(options = {}) {
@@ -132,7 +132,7 @@
           if (session.stage_index !== 5) return false;
           if (!hasPracticeResponse(session)) {
             clearBound(); phase = 'activity_requested'; step = 'lesson';
-            message = 'No practice response was saved. Reopen the fictional map activity and try again.';
+            message = 'The map practice response was not completed as requested. Reopen the fictional activity and try again.';
             notify(); return true;
           }
           lastRevision = session.revision; phase = 'activity_completed';

@@ -3,9 +3,9 @@
 // remote requests, learning scores, or authorization decisions are made here.
 (function (global) {
   const LANDMARKS = Object.freeze([
-    Object.freeze({id:'signin', x:-7, z:-5}),
-    Object.freeze({id:'activities', x:0, z:-12}),
-    Object.freeze({id:'voice', x:7, z:-5})
+    Object.freeze({id:'signin', x:-7, y:4.25, z:-5}),
+    Object.freeze({id:'activities', x:0, y:4.25, z:-12}),
+    Object.freeze({id:'voice', x:7, y:4.25, z:-5})
   ]);
   const LIMIT = 17, REACH = 2.7;
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -31,6 +31,10 @@
       result[col*4+row]=n;
     }
     return result;
+  }
+  function cameraMatrix(state, width, height) {
+    const camera=[state.x,10,state.z+16], center=[state.x,1,state.z-3];
+    return multiply(perspective(Math.PI/3,width/height,.1,100),lookAt(camera,center));
   }
   // Each face has a normal for gentle directional shading; the scene uses
   // procedural geometry, so it has no imported game art or third-party code.
@@ -68,15 +72,16 @@
     return s;
   }
   function renderer(canvas) {
-    const gl=canvas.getContext('webgl', {alpha:false, antialias:true, powerPreference:'low-power'});
+    const gl=canvas.getContext('webgl', {alpha:true, antialias:true, powerPreference:'low-power'});
     if (!gl) throw Error('Graphics unavailable');
-    const vertex=shader(gl,gl.VERTEX_SHADER,`attribute vec3 position; attribute vec3 normal; uniform mat4 viewProjection; uniform vec3 offset; uniform vec3 scale; varying float light; void main(){ vec3 p=position*scale+offset; gl_Position=viewProjection*vec4(p,1.0); light=0.70+0.30*max(dot(normalize(normal/scale),normalize(vec3(0.45,0.9,0.35))),0.0); }`);
-    const fragment=shader(gl,gl.FRAGMENT_SHADER,`precision mediump float; uniform vec3 color; varying float light; void main(){ gl_FragColor=vec4(color*light,1.0); }`);
+    const vertex=shader(gl,gl.VERTEX_SHADER,`attribute vec3 position; attribute vec3 normal; uniform mat4 viewProjection; uniform vec3 offset; uniform vec3 scale; uniform vec3 eyePosition; varying float light; varying float haze; void main(){ vec3 p=position*scale+offset; vec3 n=normalize(normal/scale); gl_Position=viewProjection*vec4(p,1.0); light=0.66+0.29*max(dot(n,normalize(vec3(0.45,0.9,0.35))),0.0)+0.05*max(n.y,0.0); haze=smoothstep(22.0,65.0,distance(p,eyePosition))*0.34; }`);
+    const fragment=shader(gl,gl.FRAGMENT_SHADER,`precision mediump float; uniform vec3 color; varying float light; varying float haze; void main(){ vec3 lit=color*light; gl_FragColor=vec4(mix(lit,vec3(0.77,0.79,0.79),haze),1.0); }`);
     const program=gl.createProgram(); gl.attachShader(program,vertex); gl.attachShader(program,fragment); gl.linkProgram(program);
     if (!gl.getProgramParameter(program,gl.LINK_STATUS)) throw Error('Graphics unavailable');
     gl.deleteShader(vertex); gl.deleteShader(fragment); gl.useProgram(program);
     const meshes={};
-    for(const [name,data] of [['cube',cube()],['sphere',sphere()]]) {
+    const geometry={cube:cube(),sphere:sphere()};
+    for(const [name,data] of Object.entries(geometry)) {
       const buffer=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buffer); gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
       meshes[name]={buffer,count:data.length/6};
     }
@@ -91,11 +96,28 @@
     }
     const vp=gl.getUniformLocation(program,'viewProjection'), pos=gl.getUniformLocation(program,'offset');
     const size=gl.getUniformLocation(program,'scale'), color=gl.getUniformLocation(program,'color');
-    gl.enable(gl.DEPTH_TEST); gl.clearColor(.66,.79,.84,1);
+    const eye=gl.getUniformLocation(program,'eyePosition');
+    gl.enable(gl.DEPTH_TEST); gl.clearColor(0,0,0,0);
+    // Build fixed scenery into a small number of color batches once at mount.
+    // This avoids hundreds of draw calls on every movement, especially on phones.
+    let collecting=true;
+    const batchesByColor=new Map();
+    function collect(name,x,y,z,sx,sy,sz,c) {
+      const key=c.join(',');
+      let batch=batchesByColor.get(key);
+      if(!batch) { batch={color:c,vertices:[]}; batchesByColor.set(key,batch); }
+      const source=geometry[name], out=batch.vertices;
+      for(let i=0;i<source.length;i+=6) {
+        out.push(source[i]*sx+x,source[i+1]*sy+y,source[i+2]*sz+z,
+                 source[i+3]/sx,source[i+4]/sy,source[i+5]/sz);
+      }
+    }
     function box(x,y,z,sx,sy,sz,c) {
+      if(collecting) return collect('cube',x,y,z,sx,sy,sz,c);
       bind('cube'); gl.uniform3f(pos,x,y,z); gl.uniform3f(size,sx,sy,sz); gl.uniform3f(color,c[0],c[1],c[2]); gl.drawArrays(gl.TRIANGLES,0,meshes.cube.count);
     }
     function oval(x,y,z,sx,sy,sz,c) {
+      if(collecting) return collect('sphere',x,y,z,sx,sy,sz,c);
       bind('sphere'); gl.uniform3f(pos,x,y,z); gl.uniform3f(size,sx,sy,sz); gl.uniform3f(color,c[0],c[1],c[2]); gl.drawArrays(gl.TRIANGLES,0,meshes.sphere.count);
     }
     function tree(x,z,scale=1) {
@@ -112,6 +134,20 @@
       box(x,height+.6,z,width*.74,.55,depth*.75,roof);
       box(x+width*.25,height+1.1,z,.4,1,.45,[.35,.31,.30]);
       const front=z+depth/2+.04;
+      // Cream cornices, display windows and a striped awning add depth to
+      // the shopfront while reusing just a few batched materials.
+      box(x,2.55,front,width+.12,.16,.28,[.86,.76,.55]);
+      box(x,.13,front,width+.14,.26,.30,[.45,.39,.33]);
+      for(const side of [-1,1]) {
+        const shopX=x+side*width*.29;
+        box(shopX,1.32,front,.98,1.55,.13,[.17,.27,.31]);
+        box(shopX,1.40,front+.08,.80,1.25,.06,[.96,.77,.39]);
+        box(shopX,1.40,front+.13,.06,1.25,.06,[.42,.36,.29]);
+        box(shopX,1.40,front+.13,.80,.06,.06,[.42,.36,.29]);
+      }
+      const awningWidth=width/6;
+      for(let i=0;i<6;i++) box(x-width/2+awningWidth*(i+.5),2.42,front+.40,
+        awningWidth,.18,.8,i%2?[.86,.76,.55]:[.67,.29,.24]);
       box(x,1.05,front,.88,2.1,.14,[.17,.27,.31]);
       box(x,2.2,front,1.1,.18,.2,[.86,.76,.55]);
       const columns=Math.max(2,Math.floor(width/1.55));
@@ -124,10 +160,10 @@
         box(wx,wy,front+.10,.55,.05,.05,[.42,.36,.29]);
       }
     }
-    function lamp(x,z) {
+    function lamp(x,z,blue=false) {
       box(x,.08,z,.8,.16,.8,[.38,.37,.34]);
       box(x,1.6,z,.15,3.1,.15,[.19,.25,.26]);
-      box(x,3.35,z,.58,.55,.58,[.96,.77,.38]);
+      box(x,3.35,z,.58,.55,.58,blue?[.14,.67,.95]:[.96,.77,.38]);
       box(x,3.68,z,.72,.12,.72,[.19,.25,.26]);
       oval(x,3.75,z,.28,.3,.28,[.19,.25,.26]);
     }
@@ -146,14 +182,7 @@
       box(x,3.1,z,3,.45,.55,c); box(x,.12,z,2.8,.24,1.8,[.91,.83,.59]);
       oval(x,3.55,z,.75,.75,.75,[1,.82,.26]);
     }
-    function draw(state) {
-      const rect=canvas.getBoundingClientRect();
-      const width=Math.max(1,Math.min(1600,Math.round(rect.width*(global.devicePixelRatio||1))));
-      const height=Math.max(1,Math.min(1000,Math.round(rect.height*(global.devicePixelRatio||1))));
-      if (canvas.width!==width) canvas.width=width; if (canvas.height!==height) canvas.height=height;
-      gl.viewport(0,0,width,height); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-      const camera=[state.x,10,state.z+16], center=[state.x,1,state.z-3];
-      gl.uniformMatrix4fv(vp,false,multiply(perspective(Math.PI/3,width/height,.1,100),lookAt(camera,center)));
+    function scene() {
       // A cobbled square, riverside, and central street form a continuous map.
       box(0,-.35,0,38,.7,38,[.45,.47,.44]);
       box(0,.02,0,6,.08,38,[.52,.51,.47]);
@@ -176,9 +205,45 @@
       building(-15,-17,3.3,5.2,3.1,[.58,.41,.35],[.32,.31,.30]);
       building(13,-17,4,5.5,3.1,[.60,.43,.37],[.30,.31,.31]);
       clockTower(15,-19);
-      for(const [lx,lz] of [[-4,7],[4,7],[-4,-2],[4,-2],[-11,-4],[11,-4],[-4,-13],[4,-13]]) lamp(lx,lz);
+      // The archive's distinctive blue lantern and the decorative key and box
+      // correspond to the fictional clues; they are scenery, not controls.
+      for(const [lx,lz] of [[-4,7],[4,7],[-4,-2],[4,-2],[-11,-4],[11,-4],[-4,-13],[4,-13]]) lamp(lx,lz,lx===4&&lz===-13);
+      const gold=[1,.82,.26];
+      box(3.15,.28,-12.8,.85,.56,.8,[.45,.39,.33]);
+      oval(3.12,.62,-12.8,.34,.12,.34,gold);
+      box(2.82,.62,-12.8,.45,.12,.12,gold);
+      box(2.62,.62,-12.70,.10,.12,.30,gold);
+      box(-8.1,.32,-3.6,1.1,.64,.82,[.48,.30,.18]);
+      box(-8.1,.69,-3.6,1.18,.12,.88,[.35,.25,.18]);
+      box(-8.1,.42,-3.16,.14,.22,.05,gold);
       for(const [tx,tz] of [[-16,10],[14,11],[-15,-5],[14,-4]]) tree(tx,tz,.75);
       gate(-7,-5,[.91,.51,.24]); gate(0,-12,[.27,.48,.83]); gate(7,-5,[.77,.35,.52]);
+    }
+    scene(); collecting=false;
+    const batches=[];
+    for(const batch of batchesByColor.values()) {
+      const data=new Float32Array(batch.vertices), buffer=gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER,buffer); gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+      batches.push({buffer,count:data.length/6,color:batch.color});
+    }
+    batchesByColor.clear(); bound=null;
+    function draw(state) {
+      const rect=canvas.getBoundingClientRect();
+      const width=Math.max(1,Math.min(1600,Math.round(rect.width*(global.devicePixelRatio||1))));
+      const height=Math.max(1,Math.min(1000,Math.round(rect.height*(global.devicePixelRatio||1))));
+      if (canvas.width!==width) canvas.width=width; if (canvas.height!==height) canvas.height=height;
+      gl.viewport(0,0,width,height); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(vp,false,cameraMatrix(state,width,height));
+      gl.uniform3f(eye,state.x,10,state.z+16);
+      gl.uniform3f(pos,0,0,0); gl.uniform3f(size,1,1,1);
+      for(const batch of batches) {
+        gl.bindBuffer(gl.ARRAY_BUFFER,batch.buffer);
+        for(const [location,offset] of [[position,0],[normal,12]]) {
+          gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location,3,gl.FLOAT,false,24,offset);
+        }
+        gl.uniform3f(color,batch.color[0],batch.color[1],batch.color[2]); gl.drawArrays(gl.TRIANGLES,0,batch.count);
+      }
+      bound=null;
       // Original seed companion: a simple shaded 3D figure with limbs and leaf.
       const x=state.x,z=state.z;
       // Alternating steps and a small bob are driven only by deliberate player
@@ -190,7 +255,7 @@
       oval(x-.81,1.25+bob,z-stride,.45,.65,.48,[.10,.53,.45]); oval(x+.81,1.25+bob,z+stride,.45,.65,.48,[.10,.53,.45]);
       // Camera faces the back of the companion; the companion stays in view.
     }
-    function destroy(){ for(const mesh of Object.values(meshes))gl.deleteBuffer(mesh.buffer); gl.deleteProgram(program); }
+    function destroy(){ for(const mesh of Object.values(meshes))gl.deleteBuffer(mesh.buffer); for(const batch of batches)gl.deleteBuffer(batch.buffer); gl.deleteProgram(program); }
     return {draw,destroy};
   }
   function mount(canvas, options={}) {
@@ -198,6 +263,7 @@
     const onNearby=typeof options.onNearby==='function'?options.onNearby:()=>{};
     const onVisit=typeof options.onVisit==='function'?options.onVisit:()=>{};
     const onUnavailable=typeof options.onUnavailable==='function'?options.onUnavailable:()=>{};
+    const onViewChange=typeof options.onViewChange==='function'?options.onViewChange:()=>{};
     const state={x:0,z:7,nearby:null,walkFrame:0,reduceMotion:false};
     let active=true, destroyed=false, graphics=null, mounted=false;
     try { graphics=renderer(canvas); } catch (_) { /* Parent supplies accessible non-WebGL navigation. */ }
@@ -210,7 +276,22 @@
     }
     function paint() {
       if (!graphics || destroyed) return;
-      try { graphics.draw(state); } catch (_) { loseGraphics(); }
+      try { graphics.draw(state); } catch (_) { loseGraphics(); return; }
+      // A presentation callback failure should not be mistaken for a lost GPU.
+      if (mounted) { try { onViewChange(); } catch (_) { /* Keep the world usable. */ } }
+    }
+    function project(x,y,z) {
+      if (!graphics || destroyed || !finite(x) || !finite(y) || !finite(z) || !canvas.width || !canvas.height) {
+        return {x:0,y:0,visible:false};
+      }
+      const m=cameraMatrix(state,canvas.width,canvas.height);
+      const cx=m[0]*x+m[4]*y+m[8]*z+m[12];
+      const cy=m[1]*x+m[5]*y+m[9]*z+m[13];
+      const cz=m[2]*x+m[6]*y+m[10]*z+m[14];
+      const cw=m[3]*x+m[7]*y+m[11]*z+m[15];
+      if (!(cw>0)) return {x:0,y:0,visible:false};
+      const sx=(cx/cw+1)/2, sy=(1-cy/cw)/2;
+      return {x:sx,y:sy,visible:sx>=0&&sx<=1&&sy>=0&&sy<=1&&cz>=-cw&&cz<=cw};
     }
     function nearest() {
       let best=null,distance=Infinity;
@@ -251,7 +332,8 @@
     update();
     mounted=true;
     return Object.freeze({
-      get available(){return Boolean(graphics);}, move, interact, goTo,
+      get available(){return Boolean(graphics);}, move, interact, goTo, project,
+      getLandmarks(){return LANDMARKS.map(p=>({...p}));},
       pause(){active=false;}, resume(){if(!destroyed){active=true;update();}},
       reset(){if(!destroyed){state.x=0;state.z=7;state.walkFrame=0;update();}},
       destroy(){if(destroyed)return;active=false;destroyed=true;canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('webglcontextlost',loseGraphics);if(typeof global.removeEventListener==='function')global.removeEventListener('resize',onResize);if(graphics)graphics.destroy();},
