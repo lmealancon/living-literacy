@@ -52,7 +52,7 @@ function harness(fetch, {reduceMotion = false, initialPreferences = {}, legacyMe
   const window = { matchMedia: () => mediaQuery };
   const context = vm.createContext({document, fetch, window, localStorage, crypto: {randomUUID: () => 'fictional-test-uuid-12345678'}, console});
   vm.runInContext(fs.readFileSync('prototype/web/app.js', 'utf8'), context);
-  return {nodes, document, context, stored, mediaQuery};
+  return {nodes, document, context, stored, mediaQuery, window};
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -129,6 +129,7 @@ async function testWordTilesAndSafeResponse() {
   h.context.fixtureSession = session;
   vm.runInContext("state.identity='fictional-adult-a'; state.profile='synthetic-a'; state.csrf='csrf-a'; state.session=fixtureSession", h.context);
   await vm.runInContext('openSession()', h.context);
+  assert.equal(h.document.getElementById('lesson-guide').attrs['data-mood'], 'idle');
   const area = h.document.getElementById('response-area');
   const builder = area.descendants().find(x => x.className === 'word-builder');
   assert(builder, 'existing fictional lesson has word-building controls');
@@ -136,6 +137,7 @@ async function testWordTilesAndSafeResponse() {
   const tile = letter => all.find(x => x.tagName === 'button' && x.textContent === letter);
   const output = all.find(x => x.tagName === 'output');
   tile('m').events.click();
+  assert.equal(h.document.getElementById('lesson-guide').attrs['data-mood'], 'react');
   assert.equal(output.textContent, 'm');
   assert.equal(tile('m').disabled, true, 'a selected tile is unavailable until undone');
   tile('m').events.click();
@@ -157,6 +159,7 @@ async function testWordTilesAndSafeResponse() {
   assert.equal(form.descendants().find(x => x.tagName === 'textarea').value, 'map');
   form.descendants().find(x => x.name === 'assistance' && x.value === 'no').checked = true;
   await form.events.submit({preventDefault(){}});
+  assert.equal(h.document.getElementById('lesson-guide').attrs['data-mood'], 'celebrate');
   assert.equal(posts.length, 1);
   assert.equal(posts[0].body.response, 'map');
   assert.equal(posts[0].body.assisted, false);
@@ -224,4 +227,47 @@ async function testDynamicMotionPreference() {
   legacy.mediaQuery.change(false);
   assert.equal(legacy.document.documentElement.attrs['data-motion'], 'on');
 }
-(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });
+async function testFixedVoiceDemo() {
+  const requests = [];
+  const h = harness((url, options) => {
+    requests.push(url);
+    if (url === '/api/me') return Promise.resolve(response({}, 403));
+    if (url === '/api/logout') return Promise.resolve(response({ok:true}));
+    throw new Error('Unexpected request: ' + url);
+  });
+  await tick();
+  const played = [];
+  let cancellations = 0;
+  h.window.speechSynthesis = {speak: utterance => played.push(utterance), cancel: () => cancellations++};
+  h.window.SpeechSynthesisUtterance = function(text) { this.text = text; };
+  vm.runInContext("state.identity='synthetic-adult'; state.profile='synthetic-private-value'; state.csrf='csrf'; show('dashboard')", h.context);
+  assert.equal(played.length, 0, 'speech must be initiated by a deliberate click');
+  h.document.getElementById('voice-demo-hello').events.click();
+  assert.equal(played[0].text, 'Hello! It is nice to meet you.');
+  assert.equal(h.document.getElementById('voice-demo-text').textContent, played[0].text);
+  h.document.getElementById('voice-demo-cheer').events.click();
+  assert.equal(played[1].text, 'Hooray! Let us explore together.');
+  assert(!played.some(utterance => utterance.text.includes('synthetic-private-value')));
+  const generation = cancellations;
+  h.document.getElementById('voice-demo-stop').events.click();
+  assert(cancellations > generation, 'stop cancels platform speech');
+  const oldError = played[1].onerror;
+  oldError();
+  assert.equal(h.document.getElementById('voice-demo-status').textContent, 'Audio stopped.', 'late error must not overwrite a later stop');
+  h.document.getElementById('voice-demo-hello').events.click();
+  const beforeLesson = cancellations;
+  vm.runInContext("show('lesson-view')", h.context);
+  assert(cancellations > beforeLesson, 'leaving the dashboard cancels the isolated demo');
+  h.document.getElementById('voice-demo-cheer').events.click();
+  const beforeLogout = cancellations;
+  await h.document.getElementById('logout').events.click();
+  assert(cancellations > beforeLogout, 'logout cancels platform speech');
+  assert.deepEqual(requests, ['/api/me', '/api/logout'], 'voice demo makes no application network calls');
+
+  const noVoice = harness(() => Promise.resolve(response({}, 403)));
+  await tick();
+  noVoice.document.getElementById('voice-demo-hello').events.click();
+  assert.equal(noVoice.document.getElementById('voice-demo-text').textContent, 'Hello! It is nice to meet you.');
+  assert(noVoice.document.getElementById('voice-demo-status').textContent.includes('unavailable'));
+}
+(async () => { await testAccountSwitchClearsAndIgnoresLateResults(); await testExplicitAssistanceIsRequiredAndRecorded(); await testWordTilesAndSafeResponse(); await testAccessibleVisualPreferences(); await testDynamicMotionPreference(); await testFixedVoiceDemo(); console.log('Web privacy and assistance checks passed'); })().catch(error => { console.error(error); process.exitCode = 1; });

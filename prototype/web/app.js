@@ -47,6 +47,7 @@ const snapshot = () => ({epoch: state.epoch, identity: state.identity, profile: 
 const current = stamp => stamp.epoch === state.epoch && stamp.identity === state.identity && stamp.profile === state.profile;
 function clearLessonData() {
   state.session = null;
+  $('lesson-guide').setAttribute('data-mood', 'idle');
   for (const id of ['stage-pathway', 'response-area', 'lesson-actions']) $(id).replaceChildren();
   for (const id of ['stage-title', 'stage-instruction', 'stage-word', 'coach-note', 'lesson-counter', 'session-status']) $(id).textContent = '';
   $('progress-fill').style.width = '0%'; $('progress').setAttribute('aria-valuenow', '1');
@@ -83,7 +84,54 @@ function button(text, callback, primary = false) {
   node.addEventListener('click', callback);
   return node;
 }
+// An isolated adult demo: only these fixed phrases can be passed to the browser's voice service.
+// This is neither lesson narration nor a conversation, and it accepts no learner information.
+const demoPhrases = Object.freeze({hello: 'Hello! It is nice to meet you.', cheer: 'Hooray! Let us explore together.'});
+let demoSpeechGeneration = 0;
+function stopDemoSpeech() {
+  demoSpeechGeneration++;
+  try { window.speechSynthesis?.cancel(); } catch (_) { /* A voice service may be unavailable. */ }
+  $('voice-demo-guide').setAttribute('data-mood', 'idle');
+}
+function playDemoSpeech(choice) {
+  if (!Object.hasOwn(demoPhrases, choice)) return;
+  stopDemoSpeech();
+  const phrase = demoPhrases[choice];
+  $('voice-demo-text').textContent = phrase;
+  const stamp = demoSpeechGeneration;
+  if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== 'function') {
+    $('voice-demo-status').textContent = 'Voice is unavailable in this browser. The words are shown above.';
+    return;
+  }
+  try {
+    const utterance = new window.SpeechSynthesisUtterance(phrase);
+    utterance.lang = 'en-US';
+    utterance.onend = () => {
+      if (stamp !== demoSpeechGeneration) return;
+      $('voice-demo-guide').setAttribute('data-mood', 'idle');
+      $('voice-demo-status').textContent = 'Sample finished.';
+    };
+    utterance.onerror = () => {
+      if (stamp !== demoSpeechGeneration) return;
+      $('voice-demo-guide').setAttribute('data-mood', 'idle');
+      $('voice-demo-status').textContent = 'Voice could not be played. The words are shown above.';
+    };
+    $('voice-demo-guide').setAttribute('data-mood', 'react');
+    $('voice-demo-status').textContent = 'Playing the sample phrase.';
+    window.speechSynthesis.speak(utterance);
+  } catch (_) {
+    $('voice-demo-guide').setAttribute('data-mood', 'idle');
+    $('voice-demo-status').textContent = 'Voice could not be played. The words are shown above.';
+  }
+}
+$('voice-demo-hello').addEventListener('click', () => playDemoSpeech('hello'));
+$('voice-demo-cheer').addEventListener('click', () => playDemoSpeech('cheer'));
+$('voice-demo-stop').addEventListener('click', () => {
+  stopDemoSpeech();
+  $('voice-demo-status').textContent = 'Audio stopped.';
+});
 function show(view) {
+  if (view !== 'dashboard') stopDemoSpeech();
   for (const id of ['login-view', 'dashboard', 'lesson-view']) $(id).hidden = id !== view;
   $('logout').hidden = !state.identity;
   document.body?.setAttribute('data-view', view);
@@ -329,6 +377,7 @@ async function openSession() {
     return;
   }
   show('lesson-view');
+  $('lesson-guide').setAttribute('data-mood', 'idle');
   const step = lesson.stages[session.stage_index];
   const pathway = $('stage-pathway'); pathway.replaceChildren();
   lesson.stages.forEach((item, index) => {
@@ -378,6 +427,7 @@ async function openSession() {
       function chooseLetter(index) {
         if (!Number.isInteger(index) || index < 0 || index >= tiles.length || tiles[index].disabled) return;
         tiles[index].disabled = true; selected.push(index); updateTray();
+        $('lesson-guide').setAttribute('data-mood', 'react');
       }
       symbols.forEach((letter, index) => {
         const tile = button(letter, () => chooseLetter(index));
@@ -427,6 +477,10 @@ async function runAction(action, extra = {}) {
     if (!current(stamp) || state.session !== session) return;
     state.session = data.session;
     await openSession();
+    // Acknowledges a successful save or completion, not correctness or mastery.
+    if (current(stamp) && state.session === data.session && (action === 'respond' || action === 'complete')) {
+      $('lesson-guide').setAttribute('data-mood', 'celebrate');
+    }
   } catch (error) { if (current(stamp) && state.session === session) { clearLessonData(); show('dashboard'); message(friendlyError(error), true); } }
 }
 $('login-form').addEventListener('submit', async event => {
